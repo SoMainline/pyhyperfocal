@@ -1,0 +1,26 @@
+{
+    "app": {
+        "device": "not a phone x64",
+        "preview_resolution": [720, 1280]
+    },
+    "cameras": [
+        {
+            "name": "valve index",
+            "id": 0,
+            "default": true,
+            "need_v4l2_setup": false,
+            "rotate": 90,
+            "capture_resolution":[1920, 920],
+            "fps": 54
+        },
+        {
+            "name": "pseye",
+            "id": 2,
+            "default": false,
+            "need_v4l2_setup": false,
+            "rotate": 0,
+            "capture_resolution":[640, 480],
+            "fps": 30
+        }
+    ]
+}
