@@ -17,8 +17,10 @@ from docopt import docopt
 import json
 import os
 import sys
-import functools
+# import functools
 import time
+from datetime import datetime
+from glob import glob
 from typing import Tuple, Dict, TypeVar, List, Callable, Generic
 
 # types
@@ -36,6 +38,7 @@ def parse_args(args: dict) -> Tuple[app_settings, camera_configs]:
     app = (
         args['app']['device'],
         args['app']['preview_resolution'],
+        args['app']['resources_dir'],
     )
 
     cameras = args['cameras']
@@ -70,7 +73,9 @@ def validate_cameras(cameras: camera_configs) -> camera_configs:
             ret, _ = vod.read()
 
             if not ret:
-                raise RuntimeError(f"inactive video source \'{i['name']}\'")
+                raise RuntimeError(
+                    f"failed to read frames from video source \'{i['name']}\'"
+                )
 
             cleanup_camera(vod, i)
 
@@ -80,6 +85,15 @@ def validate_cameras(cameras: camera_configs) -> camera_configs:
             print(f"failed to validate camera '{i['name']}': {e}")
 
     return valid
+
+
+def combine_paths(app_config_path: str, resource_dir_path: str) -> str:
+    return os.path.normpath(
+        os.path.join(
+            os.path.dirname(app_config_path),
+            resource_dir_path
+        )
+    )
 
 ###############################################################################
 # IMAGE PROCESSING STUFF
@@ -140,65 +154,6 @@ def process_photo(img: np.ndarray, config: Dict[str, setting]) -> np.ndarray:
     if config['rotate'] != 0:
         img = rotate_bound(img, config['rotate'])
     return img  # for now only do rotation
-
-
-###############################################################################
-# FUNCTIONALITY STUFF
-###############################################################################
-
-
-class ref(Generic[T]):
-    def __init__(self, obj: T): self.obj = obj  # noqa
-    def get(self):    return self.obj        # noqa
-    def set(self, obj: T):      self.obj = obj  # noqa
-
-
-def take_photo(
-    vod: ref[cv2.VideoCapture],
-    config: ref[Dict[str, setting]]
-) -> bool:
-    if not os.path.exists('./Camera'):
-        os.mkdir('./Camera')
-
-    ret, frame = vod.get().read()
-
-    if not ret:
-        return False
-
-    cv2.imwrite(
-        f'./Camera/IMG_{time.time()}_raw.png',
-        process_photo(frame, config.get())
-    )
-
-    print(f'image saved at: ./Camera/IMG_{time.time()}_raw.png')
-    return True
-
-
-def cycle_cameras(
-    cameras: camera_configs,
-    curr_vod: ref[cv2.VideoCapture],
-    curr_camcfg: ref[Dict[str, setting]],
-    curr_camcfg_idx: ref[int],
-    camera_alive_lock: ref[bool]
-) -> bool:
-    camera_alive_lock.set(True)
-    time.sleep(1 / 10)
-    cleanup_camera(curr_vod.get(), curr_camcfg.get())
-
-    # print(f'last camera: {curr_camcfg_idx.get()}')
-    # print(len(cameras))
-    curr_camcfg_idx.set(curr_camcfg_idx.get() + 1)
-    if len(cameras) <= curr_camcfg_idx.get():
-        curr_camcfg_idx.set(0)
-
-    curr_camcfg.set(cameras[curr_camcfg_idx.get()])  # noqa unused variable
-
-    print(f'current camera: {curr_camcfg_idx.get()}')
-
-    curr_vod.set(init_camera(curr_camcfg.get()))
-    camera_alive_lock.set(False)
-
-    return True
 
 ###############################################################################
 # UI STUFF
@@ -333,6 +288,76 @@ def draw_transparent_objects(
     return canvas
 
 ###############################################################################
+# FUNCTIONALITY STUFF
+###############################################################################
+
+
+class ref(Generic[T]):
+    def __init__(self, obj: T): self.obj = obj  # noqa
+    def get(self):    return self.obj        # noqa
+    def set(self, obj: T):      self.obj = obj  # noqa
+
+
+def take_photo(
+    save_dir: str,
+    vod: ref[cv2.VideoCapture],
+    config: ref[Dict[str, setting]]
+) -> bool:
+    save_path = os.path.normpath(os.path.join(save_dir, 'hyperfocal'))
+
+    print(save_path, save_dir)
+
+    if not os.path.exists(save_path):
+        os.mkdir(save_path)
+
+    ret, frame = vod.get().read()
+
+    if not ret:
+        return False
+
+    img_save_path = os.path.normpath(
+        os.path.join(
+            save_path,
+            f'IMG_{datetime.now().strftime("%Y%m%d_%H%M%S_%f")}_raw.png'
+        )
+    )
+
+    cv2.imwrite(
+        img_save_path,
+        process_photo(frame, config.get())
+    )
+
+    print(f'image saved at: {img_save_path}')
+    return True
+
+
+def cycle_cameras(
+    cameras: camera_configs,
+    vod: ref[cv2.VideoCapture],
+    config: ref[Dict[str, setting]],
+    config_index: ref[int],
+    camera_alive_lock: ref[bool]
+) -> bool:
+    camera_alive_lock.set(True)
+    time.sleep(1 / 10)
+    cleanup_camera(vod.get(), config.get())
+
+    # print(f'last camera: {curr_camcfg_idx.get()}')
+    # print(len(cameras))
+    config_index.set(config_index.get() + 1)
+    if len(cameras) <= config_index.get():
+        config_index.set(0)
+
+    config.set(cameras[config_index.get()])  # noqa unused variable
+
+    print(f'current camera: {config_index.get()}')
+
+    vod.set(init_camera(config.get()))
+    camera_alive_lock.set(False)
+
+    return True
+
+###############################################################################
 # APP RUNTIME
 ###############################################################################
 
@@ -350,6 +375,8 @@ WINDOW_NAME = 'app'
 app_settings, cameras = parse_args(conf)
 
 DEVICE_NAME = app_settings[0]
+SAVE_DIR = './Camera'
+DATA_DIR = combine_paths(args['<cfg_path>'], app_settings[2])
 
 cameras = validate_cameras(cameras)
 
@@ -360,7 +387,7 @@ curr_camcfg_idx = 0
 
 h = 0
 
-# look for default camera
+# look for a default camera
 for i in cameras:
     if i['default']:
         curr_camcfg = i
@@ -368,7 +395,7 @@ for i in cameras:
         break
     h += 1
 else:
-    curr_camcfg = cameras[0]  # defualt to first camera if not defualt is given
+    curr_camcfg = cameras[0]  # default to first camera if no default is given
 
 # print(curr_camcfg, cameras)
 
@@ -376,6 +403,7 @@ vod = init_camera(curr_camcfg)
 
 cam_change_lock = False
 
+# shared object references
 curr_camcfg_ref = ref(curr_camcfg)
 curr_camcfg_idx_ref = ref(curr_camcfg_idx)
 curr_vod_ref = ref(vod)
@@ -385,55 +413,67 @@ camera_ret_ref = ref(cam_change_lock)
 
 cv2.namedWindow(WINDOW_NAME)
 
+# coordinates
 last_img_p = np.array((0.25, 0.85)) * app_settings[1] - (35, 35)
 photo_bt_p = np.array((0.5, 0.85)) * app_settings[1] - (50, 50)
 change_cam_bt_p = np.array((0.75, 0.85)) * app_settings[1] - (35, 35)
 
 settings_bt_p = np.array((0.9, 0.07)) * app_settings[1] - (25, 25)
 
-buttons = [
-    CanvasObject(
-        last_img_p,
-        np.ones((70, 70, 3), dtype=np.uint8) * 255,
-        WINDOW_NAME,
-        lambda: print('gallery')
-    ),
+# buttons
+gallery_button = CanvasObject(
+    last_img_p,
+    np.ones((70, 70, 3), dtype=np.uint8) * 255,
+    WINDOW_NAME,
+    lambda: print('gallery')
+)
+
+take_photo_button = CanvasAlphaObject(
+    photo_bt_p,
+    *open_image_with_alpha(f'{DATA_DIR}/icons/photo_button.png'),
+    WINDOW_NAME,
+    lambda: take_photo(SAVE_DIR, curr_vod_ref, curr_camcfg_ref)
+)
+
+settings_button = CanvasAlphaObject(
+    settings_bt_p,
+    *open_image_with_alpha(f'{DATA_DIR}/icons/settings_button.png'),
+    WINDOW_NAME,
+    lambda: print('settings')
+)
+
+# button lists for rendering
+buttons_opaque = [
+    gallery_button,
 ]
 
 buttons_transparent = [
-    CanvasAlphaObject(
-        photo_bt_p,
-        *open_image_with_alpha('../data/icons/photo_button.png'),
-        WINDOW_NAME,
-        lambda: take_photo(curr_vod_ref, curr_camcfg_ref)
-    ),
-    CanvasAlphaObject(
-        settings_bt_p,
-        *open_image_with_alpha('../data/icons/settings_button.png'),
-        WINDOW_NAME,
-        lambda: print('settings')
-    ),
+    take_photo_button,
+    settings_button,
 ]
 
 # don't add this function if only 1 camera is available
 if len(cameras) > 1:
-    buttons_transparent.append(
-        CanvasAlphaObject(
-            change_cam_bt_p,
-            *open_image_with_alpha('../data/icons/change_camera_button.png'),
-            WINDOW_NAME,
-            lambda: cycle_cameras(
-                cameras,
-                curr_vod_ref,
-                curr_camcfg_ref,
-                curr_camcfg_idx_ref,
-                camera_ret_ref
-            )
+    cycle_cameras_button = CanvasAlphaObject(
+        change_cam_bt_p,
+        *open_image_with_alpha(
+            f'{DATA_DIR}/icons/change_camera_button.png'
+        ),
+        WINDOW_NAME,
+        lambda: cycle_cameras(
+            cameras,
+            curr_vod_ref,
+            curr_camcfg_ref,
+            curr_camcfg_idx_ref,
+            camera_ret_ref
         )
     )
 
+    buttons_transparent.append(cycle_cameras_button)
+
 canvas_shape = (*app_settings[1][::-1], 3)
 
+# runtime loop
 while 1:
     ret, frame = curr_vod_ref.get().read()
 
@@ -445,7 +485,7 @@ while 1:
 
     frame = process_preview(frame, curr_camcfg_ref.get(), app_settings[1])
 
-    image = draw_objects(canvas, frame, buttons)
+    image = draw_objects(canvas, frame, buttons_opaque)
     image = draw_transparent_objects(
         image, np.zeros((10, 10, 3), dtype=np.uint8), buttons_transparent
     )
