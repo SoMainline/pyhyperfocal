@@ -87,11 +87,11 @@ def validate_cameras(cameras: camera_configs) -> camera_configs:
     return valid
 
 
-def combine_paths(app_config_path: str, resource_dir_path: str) -> str:
+def combine_paths(base_path: str, *other_paths: List[str]) -> str:
     return os.path.normpath(
         os.path.join(
-            os.path.dirname(app_config_path),
-            resource_dir_path
+            os.path.dirname(base_path),
+            *other_paths
         )
     )
 
