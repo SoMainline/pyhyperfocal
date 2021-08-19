@@ -21,6 +21,8 @@ import sys
 import time
 from datetime import datetime
 from glob import glob
+import subprocess
+import pathlib
 from typing import Tuple, Dict, TypeVar, List, Callable, Generic
 
 # types
@@ -35,12 +37,7 @@ camera_configs = List[Dict[str, setting]]
 
 
 def parse_args(args: dict) -> Tuple[app_settings, camera_configs]:
-    app = (
-        args['app']['device'],
-        args['app']['preview_resolution'],
-        args['app']['resources_dir'],
-    )
-
+    app = args['app']
     cameras = args['cameras']
 
     return app, cameras
@@ -161,15 +158,15 @@ def process_photo(img: np.ndarray, config: Dict[str, setting]) -> np.ndarray:
 
 
 CV_MOUSE_CALLBACK_METHODS = []
+_ENABLE_CALLBACKS = True
 
 
 def mouse_cb_global(*args):
-    global CV_MOUSE_CALLBACK_METHODS
-    # res = np.array([720, 1280])
-    # p = np.array(args[1:3])
-    # print(p / res, (res - p) / res)
-    for method_cb in CV_MOUSE_CALLBACK_METHODS:
-        method_cb(*args)
+    global CV_MOUSE_CALLBACK_METHODS, _ENABLE_CALLBACKS
+
+    if _ENABLE_CALLBACKS:
+        for method_cb in CV_MOUSE_CALLBACK_METHODS:
+            method_cb(*args)
 
 
 class CanvasObject:
@@ -242,7 +239,7 @@ def draw_objects(
     canvas: np.ndarray,
     frame: np.ndarray,
     objects: List[CanvasObject]
-):
+) -> np.ndarray:
     # draw frame
     # print(canvas.shape, frame.shape)
     canvas[:frame.shape[0], :frame.shape[1], :] = frame
@@ -261,7 +258,7 @@ def draw_transparent_objects(
     canvas: np.ndarray,
     frame: np.ndarray,
     objects: List[CanvasAlphaObject]
-):
+) -> np.ndarray:
     # draw frame
     # print(canvas.shape, frame.shape)
     canvas[:frame.shape[0], :frame.shape[1], :] = frame
@@ -301,9 +298,10 @@ class ref(Generic[T]):
 def take_photo(
     save_dir: str,
     vod: ref[cv2.VideoCapture],
-    config: ref[Dict[str, setting]]
+    config: ref[Dict[str, setting]],
+    gallery_button_ref: ref[CanvasObject]
 ) -> bool:
-    save_path = os.path.normpath(os.path.join(save_dir, 'hyperfocal'))
+    save_path = save_dir
 
     print(save_path, save_dir)
 
@@ -322,10 +320,21 @@ def take_photo(
         )
     )
 
+    image = process_photo(frame, config.get())
+
     cv2.imwrite(
         img_save_path,
-        process_photo(frame, config.get())
+        image
     )
+
+    # update gallery button icon
+    bt = gallery_button_ref.get()
+    # this will look cursed
+    # TODO: fix thumbnail transform
+    bt.img = cv2.resize(
+        image, bt.size, interpolation=cv2.INTER_AREA
+    )
+    gallery_button_ref.set(bt)
 
     print(f'image saved at: {img_save_path}')
     return True
@@ -357,6 +366,63 @@ def cycle_cameras(
 
     return True
 
+
+def _get_images(
+    dir_path: str
+) -> List[str]:
+    image_paths = []
+    img_types = ('*.jpg', '*.jpeg', '*.png')
+
+    for i in img_types:
+        image_paths += glob(f'{dir_path}/{i.lower()}')
+        image_paths += glob(f'{dir_path}/{i.upper()}')
+
+    image_paths = sorted(
+        image_paths,
+        key=lambda x: pathlib.Path(x).stat().st_mtime,
+        reverse=True
+    )
+
+    return image_paths
+
+
+def gallery(
+    winname: str,
+    image_save_path: str,
+    canvas_res: Tuple[int, int],
+    use_system_gallery: bool,
+    gallery_lock_ref: ref[bool]
+) -> bool:
+    global _ENABLE_CALLBACKS
+
+    _ENABLE_CALLBACKS = False
+
+    image_paths = _get_images(image_save_path)
+
+    if use_system_gallery:
+        gallery_lock_ref.set(False)
+
+        # this may break on other distros
+        subprocess.call(('xdg-open', image_paths[0]))
+
+        _ENABLE_CALLBACKS = True
+        return True
+
+    curr_img = cv2.imread(image_paths[0])
+    cv2.imshow(winname, curr_img)
+
+    while 1:
+        cv2.imshow(winname, curr_img)
+
+        key = cv2.waitKey(1) & 0xFF
+
+        if key == 27 or key == ord('q'):
+            break
+
+    gallery_lock_ref.set(False)
+    _ENABLE_CALLBACKS = True
+    return True
+
 ###############################################################################
 # APP RUNTIME
 ###############################################################################
@@ -370,13 +436,14 @@ args = docopt(__doc__, version=__version__)
 with open(args['<cfg_path>'], 'r') as f:
     conf = json.loads(f.read())
 
-WINDOW_NAME = 'app'
-
 app_settings, cameras = parse_args(conf)
 
-DEVICE_NAME = app_settings[0]
+WINDOW_NAME = 'app'
+
+DEVICE_NAME = app_settings['device']
 SAVE_DIR = './Camera'
-DATA_DIR = combine_paths(args['<cfg_path>'], app_settings[2])
+SAVE_DIR = os.path.normpath(os.path.join(SAVE_DIR, 'hyperfocal'))
+DATA_DIR = combine_paths(args['<cfg_path>'], app_settings['resources_dir'])
 
 cameras = validate_cameras(cameras)
 
@@ -401,38 +468,64 @@ else:
 
 vod = init_camera(curr_camcfg)
 
-cam_change_lock = False
 
 # shared object references
 curr_camcfg_ref = ref(curr_camcfg)
 curr_camcfg_idx_ref = ref(curr_camcfg_idx)
 curr_vod_ref = ref(vod)
-camera_ret_ref = ref(cam_change_lock)
+camera_lock_ref = ref(False)
+gallery_lock_ref = ref(False)
 
 # vod = cv2.VideoCapture(cam_idx)
 
 cv2.namedWindow(WINDOW_NAME)
 
 # coordinates
-last_img_p = np.array((0.25, 0.85)) * app_settings[1] - (35, 35)
-photo_bt_p = np.array((0.5, 0.85)) * app_settings[1] - (50, 50)
-change_cam_bt_p = np.array((0.75, 0.85)) * app_settings[1] - (35, 35)
+# this indentation awfulness is brought to you by PEP8
+last_img_p = np.array(
+    (0.25, 0.85)
+) * app_settings['preview_resolution'] - (35, 35)
+photo_bt_p = np.array(
+    (0.5, 0.85)
+) * app_settings['preview_resolution'] - (50, 50)
+change_cam_bt_p = np.array(
+    (0.75, 0.85)
+) * app_settings['preview_resolution'] - (35, 35)
 
-settings_bt_p = np.array((0.9, 0.07)) * app_settings[1] - (25, 25)
+settings_bt_p = np.array(
+    (0.9, 0.07)
+) * app_settings['preview_resolution'] - (25, 25)
 
 # buttons
 gallery_button = CanvasObject(
     last_img_p,
-    np.ones((70, 70, 3), dtype=np.uint8) * 255,
+    np.ones((70, 70, 3), dtype=np.uint8) * 150,
     WINDOW_NAME,
-    lambda: print('gallery')
+    lambda: gallery_lock_ref.set(True)
 )
+
+# try to make a last photo preview if possible
+images = _get_images(SAVE_DIR)
+if len(images):
+    gallery_button.img = cv2.resize(
+        cv2.imread(images[0]),
+        gallery_button.size,
+        interpolation=cv2.INTER_AREA
+    )
+
+
+gallery_button_ref = ref(gallery_button)
 
 take_photo_button = CanvasAlphaObject(
     photo_bt_p,
     *open_image_with_alpha(f'{DATA_DIR}/icons/photo_button.png'),
     WINDOW_NAME,
-    lambda: take_photo(SAVE_DIR, curr_vod_ref, curr_camcfg_ref)
+    lambda: take_photo(
+        SAVE_DIR,
+        curr_vod_ref,
+        curr_camcfg_ref,
+        gallery_button_ref
+    )
 )
 
 settings_button = CanvasAlphaObject(
@@ -465,25 +558,40 @@ if len(cameras) > 1:
             curr_vod_ref,
             curr_camcfg_ref,
             curr_camcfg_idx_ref,
-            camera_ret_ref
+            camera_lock_ref
         )
     )
 
     buttons_transparent.append(cycle_cameras_button)
 
-canvas_shape = (*app_settings[1][::-1], 3)
+canvas_shape = (*app_settings['preview_resolution'][::-1], 3)
 
 # runtime loop
 while 1:
+
     ret, frame = curr_vod_ref.get().read()
 
-    if not ret and not camera_ret_ref.get():
+    if not ret and not camera_lock_ref.get():
         print('video source died', curr_camcfg_idx_ref.get())
         break
 
+    # check for a runtime switch
+    # needs to be here to keep camera feed up to date
+    if gallery_lock_ref.get():
+        gallery(
+            WINDOW_NAME,
+            SAVE_DIR,
+            app_settings['preview_resolution'],
+            app_settings['use_system_gallery'],
+            gallery_lock_ref
+        )
+        gallery_lock_ref.set(False)
+
     canvas = np.zeros(canvas_shape, dtype=np.uint8)
 
-    frame = process_preview(frame, curr_camcfg_ref.get(), app_settings[1])
+    frame = process_preview(
+        frame, curr_camcfg_ref.get(), app_settings['preview_resolution']
+    )
 
     image = draw_objects(canvas, frame, buttons_opaque)
     image = draw_transparent_objects(
