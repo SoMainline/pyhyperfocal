@@ -16,7 +16,7 @@ import numpy as np
 from docopt import docopt
 import json
 import os
-import sys
+# import sys
 # import functools
 import time
 from datetime import datetime
@@ -428,182 +428,183 @@ def gallery(
 ###############################################################################
 
 
-if __name__ != '__main__':
-    sys.exit(1)
+def main():
+    args = docopt(__doc__, version=__version__)
 
-args = docopt(__doc__, version=__version__)
+    with open(args['<cfg_path>'], 'r') as f:
+        conf = json.loads(f.read())
 
-with open(args['<cfg_path>'], 'r') as f:
-    conf = json.loads(f.read())
+    app_settings, cameras = parse_args(conf)
 
-app_settings, cameras = parse_args(conf)
+    WINDOW_NAME = 'app'
 
-WINDOW_NAME = 'app'
+    DEVICE_NAME = app_settings['device']  # noqa unused variable
+    SAVE_DIR = './Camera'
+    SAVE_DIR = os.path.normpath(os.path.join(SAVE_DIR, 'hyperfocal'))
+    DATA_DIR = combine_paths(args['<cfg_path>'], app_settings['resources_dir'])
 
-DEVICE_NAME = app_settings['device']
-SAVE_DIR = './Camera'
-SAVE_DIR = os.path.normpath(os.path.join(SAVE_DIR, 'hyperfocal'))
-DATA_DIR = combine_paths(args['<cfg_path>'], app_settings['resources_dir'])
+    cameras = validate_cameras(cameras)
 
-cameras = validate_cameras(cameras)
+    # print(cameras)
 
-# print(cameras)
+    curr_camcfg = None
+    curr_camcfg_idx = 0
 
-curr_camcfg = None
-curr_camcfg_idx = 0
+    h = 0
 
-h = 0
+    # look for a default camera
+    for i in cameras:
+        if i['default']:
+            curr_camcfg = i
+            curr_camcfg_idx = h
+            break
+        h += 1
+    else:
+        # default to the first camera if no default is given
+        curr_camcfg = cameras[0]
 
-# look for a default camera
-for i in cameras:
-    if i['default']:
-        curr_camcfg = i
-        curr_camcfg_idx = h
-        break
-    h += 1
-else:
-    curr_camcfg = cameras[0]  # default to first camera if no default is given
+    # print(curr_camcfg, cameras)
 
-# print(curr_camcfg, cameras)
+    vod = init_camera(curr_camcfg)
 
-vod = init_camera(curr_camcfg)
+    # shared object references
+    curr_camcfg_ref = ref(curr_camcfg)
+    curr_camcfg_idx_ref = ref(curr_camcfg_idx)
+    curr_vod_ref = ref(vod)
+    camera_lock_ref = ref(False)
+    gallery_lock_ref = ref(False)
 
+    # vod = cv2.VideoCapture(cam_idx)
 
-# shared object references
-curr_camcfg_ref = ref(curr_camcfg)
-curr_camcfg_idx_ref = ref(curr_camcfg_idx)
-curr_vod_ref = ref(vod)
-camera_lock_ref = ref(False)
-gallery_lock_ref = ref(False)
+    cv2.namedWindow(WINDOW_NAME)
 
-# vod = cv2.VideoCapture(cam_idx)
+    # coordinates
+    # this indentation awfulness is brought to you by PEP8
+    last_img_p = np.array(
+        (0.25, 0.85)
+    ) * app_settings['preview_resolution'] - (35, 35)
+    photo_bt_p = np.array(
+        (0.5, 0.85)
+    ) * app_settings['preview_resolution'] - (50, 50)
+    change_cam_bt_p = np.array(
+        (0.75, 0.85)
+    ) * app_settings['preview_resolution'] - (35, 35)
 
-cv2.namedWindow(WINDOW_NAME)
+    settings_bt_p = np.array(
+        (0.9, 0.07)
+    ) * app_settings['preview_resolution'] - (25, 25)
 
-# coordinates
-# this indentation awfulness is brought to you by PEP8
-last_img_p = np.array(
-    (0.25, 0.85)
-) * app_settings['preview_resolution'] - (35, 35)
-photo_bt_p = np.array(
-    (0.5, 0.85)
-) * app_settings['preview_resolution'] - (50, 50)
-change_cam_bt_p = np.array(
-    (0.75, 0.85)
-) * app_settings['preview_resolution'] - (35, 35)
-
-settings_bt_p = np.array(
-    (0.9, 0.07)
-) * app_settings['preview_resolution'] - (25, 25)
-
-# buttons
-gallery_button = CanvasObject(
-    last_img_p,
-    np.ones((70, 70, 3), dtype=np.uint8) * 150,
-    WINDOW_NAME,
-    lambda: gallery_lock_ref.set(True)
-)
-
-# try to make a last photo preview if possible
-images = _get_images(SAVE_DIR)
-if len(images):
-    gallery_button.img = cv2.resize(
-        cv2.imread(images[0]),
-        gallery_button.size,
-        interpolation=cv2.INTER_AREA
-    )
-
-
-gallery_button_ref = ref(gallery_button)
-
-take_photo_button = CanvasAlphaObject(
-    photo_bt_p,
-    *open_image_with_alpha(f'{DATA_DIR}/icons/photo_button.png'),
-    WINDOW_NAME,
-    lambda: take_photo(
-        SAVE_DIR,
-        curr_vod_ref,
-        curr_camcfg_ref,
-        gallery_button_ref
-    )
-)
-
-settings_button = CanvasAlphaObject(
-    settings_bt_p,
-    *open_image_with_alpha(f'{DATA_DIR}/icons/settings_button.png'),
-    WINDOW_NAME,
-    lambda: print('settings')
-)
-
-# button lists for rendering
-buttons_opaque = [
-    gallery_button,
-]
-
-buttons_transparent = [
-    take_photo_button,
-    settings_button,
-]
-
-# don't add this function if only 1 camera is available
-if len(cameras) > 1:
-    cycle_cameras_button = CanvasAlphaObject(
-        change_cam_bt_p,
-        *open_image_with_alpha(
-            f'{DATA_DIR}/icons/change_camera_button.png'
-        ),
+    # buttons
+    gallery_button = CanvasObject(
+        last_img_p,
+        np.ones((70, 70, 3), dtype=np.uint8) * 150,
         WINDOW_NAME,
-        lambda: cycle_cameras(
-            cameras,
+        lambda: gallery_lock_ref.set(True)
+    )
+
+    # try to make a last photo preview if possible
+    images = _get_images(SAVE_DIR)
+    if len(images):
+        gallery_button.img = cv2.resize(
+            cv2.imread(images[0]),
+            gallery_button.size,
+            interpolation=cv2.INTER_AREA
+        )
+
+    gallery_button_ref = ref(gallery_button)
+
+    take_photo_button = CanvasAlphaObject(
+        photo_bt_p,
+        *open_image_with_alpha(f'{DATA_DIR}/icons/photo_button.png'),
+        WINDOW_NAME,
+        lambda: take_photo(
+            SAVE_DIR,
             curr_vod_ref,
             curr_camcfg_ref,
-            curr_camcfg_idx_ref,
-            camera_lock_ref
+            gallery_button_ref
         )
     )
 
-    buttons_transparent.append(cycle_cameras_button)
+    settings_button = CanvasAlphaObject(
+        settings_bt_p,
+        *open_image_with_alpha(f'{DATA_DIR}/icons/settings_button.png'),
+        WINDOW_NAME,
+        lambda: print('settings')
+    )
 
-canvas_shape = (*app_settings['preview_resolution'][::-1], 3)
+    # button lists for rendering
+    buttons_opaque = [
+        gallery_button,
+    ]
 
-# runtime loop
-while 1:
+    buttons_transparent = [
+        take_photo_button,
+        settings_button,
+    ]
 
-    ret, frame = curr_vod_ref.get().read()
-
-    if not ret and not camera_lock_ref.get():
-        print('video source died', curr_camcfg_idx_ref.get())
-        break
-
-    # check for a runtime switch
-    # needs to be here to keep camera feed up to date
-    if gallery_lock_ref.get():
-        gallery(
+    # don't add this function if only 1 camera is available
+    if len(cameras) > 1:
+        cycle_cameras_button = CanvasAlphaObject(
+            change_cam_bt_p,
+            *open_image_with_alpha(
+                f'{DATA_DIR}/icons/change_camera_button.png'
+            ),
             WINDOW_NAME,
-            SAVE_DIR,
-            app_settings['preview_resolution'],
-            app_settings['use_system_gallery'],
-            gallery_lock_ref
+            lambda: cycle_cameras(
+                cameras,
+                curr_vod_ref,
+                curr_camcfg_ref,
+                curr_camcfg_idx_ref,
+                camera_lock_ref
+            )
         )
-        gallery_lock_ref.set(False)
 
-    canvas = np.zeros(canvas_shape, dtype=np.uint8)
+        buttons_transparent.append(cycle_cameras_button)
 
-    frame = process_preview(
-        frame, curr_camcfg_ref.get(), app_settings['preview_resolution']
-    )
+    canvas_shape = (*app_settings['preview_resolution'][::-1], 3)
 
-    image = draw_objects(canvas, frame, buttons_opaque)
-    image = draw_transparent_objects(
-        image, np.zeros((10, 10, 3), dtype=np.uint8), buttons_transparent
-    )
+    # runtime loop
+    while 1:
 
-    cv2.imshow(WINDOW_NAME, image)
+        ret, frame = curr_vod_ref.get().read()
 
-    key = cv2.waitKey(1) & 0xFF
-    if key == 27 or key == ord('q'):
-        # print(frame.shape)
-        break
+        if not ret and not camera_lock_ref.get():
+            print('video source died', curr_camcfg_idx_ref.get())
+            break
 
-cleanup_camera(curr_vod_ref.get(), curr_camcfg_ref.get())
-cv2.destroyAllWindows()
+        # check for a runtime switch
+        # needs to be here to keep camera feed up to date
+        if gallery_lock_ref.get():
+            gallery(
+                WINDOW_NAME,
+                SAVE_DIR,
+                app_settings['preview_resolution'],
+                app_settings['use_system_gallery'],
+                gallery_lock_ref
+            )
+            gallery_lock_ref.set(False)
+
+        canvas = np.zeros(canvas_shape, dtype=np.uint8)
+
+        frame = process_preview(
+            frame, curr_camcfg_ref.get(), app_settings['preview_resolution']
+        )
+
+        image = draw_objects(canvas, frame, buttons_opaque)
+        image = draw_transparent_objects(
+            image, np.zeros((10, 10, 3), dtype=np.uint8), buttons_transparent
+        )
+
+        cv2.imshow(WINDOW_NAME, image)
+
+        key = cv2.waitKey(1) & 0xFF
+        if key == 27 or key == ord('q'):
+            # print(frame.shape)
+            break
+
+    cleanup_camera(curr_vod_ref.get(), curr_camcfg_ref.get())
+    cv2.destroyAllWindows()
+
+
+if __name__ == '__main__':
+    main()

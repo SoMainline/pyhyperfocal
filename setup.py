@@ -1,5 +1,5 @@
 from setuptools import setup, find_packages
-from camera_app import __version__
+from hyperfocal import __version__
 
 setup(
     name="hyperfocal",
@@ -20,6 +20,6 @@ setup(
         "opencv-python",
     ],
     extras_require={},
-    entry_points={},
+    entry_points={"console_scripts": ["hyperfocal=hyperfocal.__main__:main"]},
     python_requires=">=3.7",
 )
