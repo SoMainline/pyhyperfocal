@@ -18,6 +18,7 @@ setup(
         "numpy",
         "docopt",
         "opencv-python",
+        "easygui",
     ],
     extras_require={},
     entry_points={"console_scripts": ["hyperfocal=hyperfocal.__main__:main"]},
