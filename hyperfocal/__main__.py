@@ -441,39 +441,105 @@ def _get_images(
 
 def gallery(
     winname: str,
-    image_save_path: str,
-    canvas_res: Tuple[int, int],
-    use_system_gallery: bool,
-    gallery_lock_ref: ref[bool]
+    app_settings: Dict[str, setting],
+    ROOT_DIR: str
 ) -> bool:
-    global _ENABLE_CALLBACKS
+    global CV_VISIBLE_LAYER
 
-    _ENABLE_CALLBACKS = False
+    DATA_DIR = combine_paths(ROOT_DIR, app_settings['resources_dir'])
+    gallery_dir = combine_paths(ROOT_DIR, app_settings['gallery_dir'])
 
-    image_paths = _get_images(image_save_path)
+    image_paths = _get_images(gallery_dir)
 
-    if use_system_gallery:
-        gallery_lock_ref.set(False)
-
+    if app_settings['use_system_gallery']:
         # this may break on other distros
         subprocess.call(('xdg-open', image_paths[0]))
 
-        _ENABLE_CALLBACKS = True
+        CV_VISIBLE_LAYER = 0
         return True
 
-    curr_img = cv2.imread(image_paths[0])
-    cv2.imshow(winname, curr_img)
+    curr_img = ref(cv2.imread(image_paths[0]))
+    curr_img_idx = ref(0)
+    # cv2.imshow(winname, curr_img)
+
+    killer_ref = ref(False)
+
+    def next_img(image_paths: List[str], idx: ref[int], img: ref[np.ndarray]):
+        if idx.get() + 1 >= len(image_paths):
+            return
+
+        idx.set(idx.get() + 1)
+
+        temp = cv2.imread(image_paths[idx.get()])
+
+        old_img = img.get()
+        del old_img
+
+        img.set(temp)
+
+        print('next image', temp.shape)
+
+    def prev_img(image_paths: List[str], idx: ref[int], img: ref[np.ndarray]):
+        if idx.get() - 1 < 0:
+            return
+
+        idx.set(idx.get() - 1)
+
+        temp = cv2.imread(image_paths[idx.get()])
+
+        old_img = img.get()
+        del old_img
+
+        img.set(temp)
+
+        print('next image', temp.shape)
+
+    canvas_shape = (*app_settings['preview_resolution'][::-1], 3)
+
+    buttons_transparent = [
+        CanvasAlphaObject(
+            np.array(
+                (0.1, 0.1)
+            ) * app_settings['preview_resolution'] - (25, 25),
+            *open_image_with_alpha(f'{DATA_DIR}/icons/back_button.png'),
+            lambda: killer_ref.set(True),
+            layer=3
+        ),
+        CanvasAlphaObject(
+            np.array((0, 0)),
+            np.zeros((canvas_shape[0], canvas_shape[1] // 2, 3)),
+            np.zeros((canvas_shape[0], canvas_shape[1] // 2)),
+            lambda: prev_img(image_paths, curr_img_idx, curr_img),
+            layer=3
+        ),
+        CanvasAlphaObject(
+            np.array((app_settings['preview_resolution'][0] // 2, 0)),
+            np.zeros((canvas_shape[0], canvas_shape[1] // 2, 3)),
+            np.zeros((canvas_shape[0], canvas_shape[1] // 2)),
+            lambda: next_img(image_paths, curr_img_idx, curr_img),
+            layer=3
+        ),
+    ]
 
     while 1:
-        cv2.imshow(winname, curr_img)
+        canvas = np.zeros(canvas_shape, dtype=np.uint8)
+
+        frame = process_preview(
+            curr_img.get(),
+            {'rotate': 0},  # dummy camera config
+            app_settings['preview_resolution']
+        )
+
+        image = draw_transparent_objects(canvas, frame, buttons_transparent)
+
+        cv2.imshow(winname, image)
 
         key = cv2.waitKey(1) & 0xFF
 
-        if key == 27 or key == ord('q'):
+        if key == 27 or key == ord('q') or killer_ref.get():
             break
 
-    gallery_lock_ref.set(False)
-    _ENABLE_CALLBACKS = True
+    CV_VISIBLE_LAYER = 0
     return True
 
 ###############################################################################
@@ -482,6 +548,8 @@ def gallery(
 
 
 def main():
+    global CV_VISIBLE_LAYER
+
     args = docopt(__doc__, version=__version__)
 
     with open(args['<cfg_path>'], 'r') as f:
@@ -525,7 +593,6 @@ def main():
     curr_camcfg_idx_ref = ref(curr_camcfg_idx)
     curr_vod_ref = ref(vod)
     camera_lock_ref = ref(False)
-    gallery_lock_ref = ref(False)
 
     # vod = cv2.VideoCapture(cam_idx)
 
@@ -548,11 +615,22 @@ def main():
         (0.9, 0.07)
     ) * app_settings['preview_resolution'] - (25, 25)
 
+    ################################################
+    # layer 0 - normal app overlay
+    # layer 1 - settings
+    # layer 2 - resolution overlays WIP
+    # layer 3 - gallery buttons WIP
+    ################################################
+
+    def gallery_open():
+        global CV_VISIBLE_LAYER
+        CV_VISIBLE_LAYER = 3
+
     # buttons
     gallery_button = CanvasObject(
         last_img_p,
         np.ones((70, 70, 3), dtype=np.uint8) * 150,
-        lambda: gallery_lock_ref.set(True)
+        lambda: gallery_open()
     )
 
     # try to make a last photo preview if possible
@@ -691,15 +769,12 @@ def main():
 
         # check for a runtime switch
         # needs to be here to keep camera feed up to date
-        if gallery_lock_ref.get():
+        if CV_VISIBLE_LAYER == 3:
             gallery(
                 WINDOW_NAME,
-                app_settings['gallery_dir'],
-                app_settings['preview_resolution'],
-                app_settings['use_system_gallery'],
-                gallery_lock_ref
+                app_settings,
+                args['<cfg_path>']
             )
-            gallery_lock_ref.set(False)
 
         canvas = np.zeros(canvas_shape, dtype=np.uint8)
 
