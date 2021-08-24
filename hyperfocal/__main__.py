@@ -357,7 +357,7 @@ def take_photo(
     save_dir: str,
     vod: ref[cv2.VideoCapture],
     config: ref[Dict[str, setting]],
-    gallery_button_ref: ref[CanvasObject]
+    gallery_button: CanvasObject
 ) -> bool:
     save_path = save_dir
 
@@ -385,14 +385,9 @@ def take_photo(
         image
     )
 
-    # update gallery button icon
-    bt = gallery_button_ref.get()
-    # this will look cursed
-    # TODO: fix thumbnail transform
-    bt.img = cv2.resize(
-        image, bt.size, interpolation=cv2.INTER_AREA
+    gallery_button.img = cv2.resize(
+        image, gallery_button.size, interpolation=cv2.INTER_AREA
     )
-    gallery_button_ref.set(bt)
 
     print(f'image saved at: {img_save_path}')
     return True
@@ -569,8 +564,6 @@ def main():
             interpolation=cv2.INTER_AREA
         )
 
-    gallery_button_ref = ref(gallery_button)
-
     take_photo_button = CanvasAlphaObject(
         photo_bt_p,
         *open_image_with_alpha(f'{DATA_DIR}/icons/photo_button.png'),
@@ -578,7 +571,7 @@ def main():
             app_settings['gallery_dir'],
             curr_vod_ref,
             curr_camcfg_ref,
-            gallery_button_ref
+            gallery_button
         )
     )
 
