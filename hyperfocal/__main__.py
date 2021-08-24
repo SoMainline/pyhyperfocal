@@ -23,6 +23,7 @@ from datetime import datetime
 from glob import glob
 import subprocess
 import pathlib
+import easygui
 from typing import Tuple, Dict, TypeVar, List, Callable, Generic
 
 # types
@@ -157,16 +158,31 @@ def process_photo(img: np.ndarray, config: Dict[str, setting]) -> np.ndarray:
 ###############################################################################
 
 
-CV_MOUSE_CALLBACK_METHODS = []
-_ENABLE_CALLBACKS = True
+CV_VISIBLE_OBJECTS: List[
+    TypeVar(
+        'drawn_object', 'CanvasObject', 'CanvasAlphaObject'  # noqa fuck off anaconda
+    )
+] = []
+CV_VISIBLE_LAYER: int = 0
 
 
 def mouse_cb_global(*args):
-    global CV_MOUSE_CALLBACK_METHODS, _ENABLE_CALLBACKS
+    global CV_VISIBLE_OBJECTS, CV_VISIBLE_LAYER
 
-    if _ENABLE_CALLBACKS:
-        for method_cb in CV_MOUSE_CALLBACK_METHODS:
-            method_cb(*args)
+    # print(np.array(args[1:3]) / [720, 1280])
+
+    for obj in CV_VISIBLE_OBJECTS:
+        if obj.layer == CV_VISIBLE_LAYER:
+            obj._mouse_cb(*args)
+
+
+# settings button callback
+def set_layer(layer: int, obj: 'CanvasObject' = None):
+    global CV_VISIBLE_LAYER
+    CV_VISIBLE_LAYER = layer
+    print(f'layer set to {layer}')
+    if obj is not None:
+        obj.layer = layer
 
 
 class CanvasObject:
@@ -174,19 +190,19 @@ class CanvasObject:
         self,
         pos: Tuple[float, float],
         img: np.ndarray,
-        winname: str,
-        callback: Callable
+        callback: Callable,
+        layer: int = 0
     ):
-        global CV_MOUSE_CALLBACK_METHODS
+        global CV_VISIBLE_OBJECTS
         self.pos = np.array(pos).astype(int)
         self.img = img
         self.size = self.img.shape[:2][::-1]
         self.cb = callback
+        self.layer = layer
 
         self._mouse_pos = (0, 0)
         self._mouse_hold = False
-        CV_MOUSE_CALLBACK_METHODS.append(self._mouse_cb)
-        cv2.setMouseCallback(winname, mouse_cb_global)
+        CV_VISIBLE_OBJECTS.append(self)
 
     def _mouse_cb(self, event: int, x: int, y: int, *rest):
         # print(self.__class__.__name__, self.pos, self._mouse_pos)
@@ -227,10 +243,10 @@ class CanvasAlphaObject(CanvasObject):
         img: np.ndarray,
         # expecting a grayscale image
         alpha_mask: np.ndarray,
-        winname: str,
-        callback: Callable
+        callback: Callable,
+        layer: int = 0
     ):
-        super().__init__(pos, img, winname, callback)
+        super().__init__(pos, img, callback, layer)
         self.mask = np.stack((alpha_mask, ) * 3, axis=-1)
         self.mask_inv = np.stack((1 - alpha_mask, ) * 3, axis=-1)
 
@@ -240,11 +256,32 @@ def draw_objects(
     frame: np.ndarray,
     objects: List[CanvasObject]
 ) -> np.ndarray:
+    global CV_VISIBLE_LAYER
+
     # draw frame
     # print(canvas.shape, frame.shape)
-    canvas[:frame.shape[0], :frame.shape[1], :] = frame
+    if frame is not None:
+        canvas_center = np.array(canvas.shape[:2]) // 2
+        canvas_topleft = (
+            canvas_center - np.array(frame.shape[:2]) / 2
+        ).astype(int)
+
+        canvas_bottomright = (
+            canvas_center + np.array(frame.shape[:2]) / 2
+        ).astype(int)
+
+        # print(canvas_topleft, canvas_bottomright)
+        # print(frame.shape)
+        canvas[
+            canvas_topleft[0]:canvas_bottomright[0],
+            canvas_topleft[1]:canvas_bottomright[1],
+            :
+        ] = frame
 
     for i in objects:
+        if i.layer != CV_VISIBLE_LAYER:
+            continue
+
         canvas[
             i.pos[1]:i.pos[1] + i.size[0],
             i.pos[0]:i.pos[0] + i.size[1],
@@ -259,11 +296,32 @@ def draw_transparent_objects(
     frame: np.ndarray,
     objects: List[CanvasAlphaObject]
 ) -> np.ndarray:
+    global CV_VISIBLE_LAYER
+
     # draw frame
     # print(canvas.shape, frame.shape)
-    canvas[:frame.shape[0], :frame.shape[1], :] = frame
+    if frame is not None:
+        canvas_center = np.array(canvas.shape[:2]) // 2
+        canvas_topleft = (
+            canvas_center - np.array(frame.shape[:2]) / 2
+        ).astype(int)
+
+        canvas_bottomright = (
+            canvas_center + np.array(frame.shape[:2]) / 2
+        ).astype(int)
+
+        # print(canvas_topleft, canvas_bottomright)
+        # print(frame.shape)
+        canvas[
+            canvas_topleft[0]:canvas_bottomright[0],
+            canvas_topleft[1]:canvas_bottomright[1],
+            :
+        ] = frame
 
     for i in objects:
+        if i.layer != CV_VISIBLE_LAYER:
+            continue
+
         canvas[
             i.pos[1]:i.pos[1] + i.size[0],
             i.pos[0]:i.pos[0] + i.size[1],
@@ -439,8 +497,8 @@ def main():
     WINDOW_NAME = 'app'
 
     DEVICE_NAME = app_settings['device']  # noqa unused variable
-    SAVE_DIR = './Camera'
-    SAVE_DIR = os.path.normpath(os.path.join(SAVE_DIR, 'hyperfocal'))
+    # SAVE_DIR = app_settings['gallery_dir']
+    # SAVE_DIR = os.path.normpath(os.path.join(SAVE_DIR, 'hyperfocal'))
     DATA_DIR = combine_paths(args['<cfg_path>'], app_settings['resources_dir'])
 
     cameras = validate_cameras(cameras)
@@ -477,6 +535,7 @@ def main():
     # vod = cv2.VideoCapture(cam_idx)
 
     cv2.namedWindow(WINDOW_NAME)
+    cv2.setMouseCallback(WINDOW_NAME, mouse_cb_global)
 
     # coordinates
     # this indentation awfulness is brought to you by PEP8
@@ -498,12 +557,11 @@ def main():
     gallery_button = CanvasObject(
         last_img_p,
         np.ones((70, 70, 3), dtype=np.uint8) * 150,
-        WINDOW_NAME,
         lambda: gallery_lock_ref.set(True)
     )
 
     # try to make a last photo preview if possible
-    images = _get_images(SAVE_DIR)
+    images = _get_images(app_settings['gallery_dir'])
     if len(images):
         gallery_button.img = cv2.resize(
             cv2.imread(images[0]),
@@ -516,9 +574,8 @@ def main():
     take_photo_button = CanvasAlphaObject(
         photo_bt_p,
         *open_image_with_alpha(f'{DATA_DIR}/icons/photo_button.png'),
-        WINDOW_NAME,
         lambda: take_photo(
-            SAVE_DIR,
+            app_settings['gallery_dir'],
             curr_vod_ref,
             curr_camcfg_ref,
             gallery_button_ref
@@ -528,18 +585,86 @@ def main():
     settings_button = CanvasAlphaObject(
         settings_bt_p,
         *open_image_with_alpha(f'{DATA_DIR}/icons/settings_button.png'),
-        WINDOW_NAME,
-        lambda: print('settings')
+        None
+    )
+
+    settings_button.cb = lambda: set_layer(
+        1 if CV_VISIBLE_LAYER != 1 else 0,
+        settings_button  # reference to self, to stay visible
+    )
+
+    ################################################
+    # layer 0 - normal app overlay
+    # layer 1 - settings
+    # layer 2 - resolution overlays WIP
+    # layer 3 - gallery buttons WIP
+    ################################################
+
+    def gallery_toggle_setting_cb(app: Dict[str, setting]):
+        if app['use_system_gallery']:
+            app['use_system_gallery'] = False
+        else:
+            app['use_system_gallery'] = True
+
+        print(f'use_system_gallery: {app["use_system_gallery"]}')
+
+    def gallery_change_dir_setting_cb(app: Dict[str, setting]):
+        res = easygui.diropenbox(default=True)
+        if res is None:
+            return
+
+        app['gallery_dir'] = res
+        print(f'changed gallery dir to "{res}"')
+
+    def theme_change_dir_setting_cb(app: Dict[str, setting]):
+        res = easygui.diropenbox(default=True)
+        if res is None:
+            return
+
+        app['resources_dir'] = res
+        print(f'changed theme dir to "{res}"')
+
+    gallery_toggle_setting = CanvasAlphaObject(
+        np.array(
+            (0.2, 0.15)
+        ) * app_settings['preview_resolution'] - (25, 25),
+        *open_image_with_alpha(f'{DATA_DIR}/icons/gallery_button.png'),
+        lambda: gallery_toggle_setting_cb(app_settings),
+        layer=1
+    )
+
+    gallery_change_dir_setting = CanvasAlphaObject(
+        np.array(
+            (0.3, 0.15)
+        ) * app_settings['preview_resolution'] - (25, 25),
+        *open_image_with_alpha(f'{DATA_DIR}/icons/gallerydir_button.png'),
+        lambda: gallery_change_dir_setting_cb(app_settings),
+        layer=1
+    )
+
+    theme_change_dir_setting = CanvasAlphaObject(
+        np.array(
+            (0.4, 0.15)
+        ) * app_settings['preview_resolution'] - (25, 25),
+        *open_image_with_alpha(f'{DATA_DIR}/icons/theme_button.png'),
+        lambda: theme_change_dir_setting_cb(app_settings),
+        layer=1
     )
 
     # button lists for rendering
     buttons_opaque = [
+        # layer 0
         gallery_button,
     ]
 
     buttons_transparent = [
+        # layer 0
         take_photo_button,
         settings_button,
+        # layer 1
+        gallery_toggle_setting,
+        gallery_change_dir_setting,
+        theme_change_dir_setting,
     ]
 
     # don't add this function if only 1 camera is available
@@ -549,7 +674,6 @@ def main():
             *open_image_with_alpha(
                 f'{DATA_DIR}/icons/change_camera_button.png'
             ),
-            WINDOW_NAME,
             lambda: cycle_cameras(
                 cameras,
                 curr_vod_ref,
@@ -577,7 +701,7 @@ def main():
         if gallery_lock_ref.get():
             gallery(
                 WINDOW_NAME,
-                SAVE_DIR,
+                app_settings['gallery_dir'],
                 app_settings['preview_resolution'],
                 app_settings['use_system_gallery'],
                 gallery_lock_ref
@@ -592,7 +716,7 @@ def main():
 
         image = draw_objects(canvas, frame, buttons_opaque)
         image = draw_transparent_objects(
-            image, np.zeros((10, 10, 3), dtype=np.uint8), buttons_transparent
+            image, None, buttons_transparent
         )
 
         cv2.imshow(WINDOW_NAME, image)
@@ -604,6 +728,12 @@ def main():
 
     cleanup_camera(curr_vod_ref.get(), curr_camcfg_ref.get())
     cv2.destroyAllWindows()
+
+    # save settings
+    conf['app'] = app_settings
+    # conf['cameras'] =
+    with open(args['<cfg_path>'], 'w') as f:
+        f.write(json.dumps(conf, sort_keys=True, indent=4))
 
 
 if __name__ == '__main__':
