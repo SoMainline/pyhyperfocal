@@ -24,7 +24,7 @@ from glob import glob
 import subprocess
 import pathlib
 import easygui
-from typing import Tuple, Dict, TypeVar, List, Callable, Generic
+from typing import Tuple, Dict, TypeVar, List, Callable, Generic, Union
 
 # types
 T = TypeVar('T')
@@ -132,9 +132,9 @@ def process_preview(
         frame = rotate_bound(frame, config['rotate'])
 
     # print(frame.shape[:2][::-1], canvas_res)
-    if (np.array(canvas_res) <= np.array(frame.shape[:2][::-1])).all():
+    if (np.array(canvas_res) <= np.array(frame.shape[:2][::-1])).any():
         frame = cv2.resize(
-            frame, tuple(canvas_res), interpolation=cv2.INTER_AREA
+            frame, tuple(canvas_res)
         )
 
     return frame
@@ -253,7 +253,7 @@ class CanvasAlphaObject(CanvasObject):
 
 def draw_objects(
     canvas: np.ndarray,
-    frame: np.ndarray,
+    frame: Union[np.ndarray, None],
     objects: List[CanvasObject]
 ) -> np.ndarray:
     global CV_VISIBLE_LAYER
@@ -283,8 +283,8 @@ def draw_objects(
             continue
 
         canvas[
-            i.pos[1]:i.pos[1] + i.size[0],
-            i.pos[0]:i.pos[0] + i.size[1],
+            i.pos[1]:i.pos[1] + i.size[1],
+            i.pos[0]:i.pos[0] + i.size[0],
             :
         ] = i.img
 
@@ -293,7 +293,7 @@ def draw_objects(
 
 def draw_transparent_objects(
     canvas: np.ndarray,
-    frame: np.ndarray,
+    frame: Union[np.ndarray, None],
     objects: List[CanvasAlphaObject]
 ) -> np.ndarray:
     global CV_VISIBLE_LAYER
@@ -323,20 +323,20 @@ def draw_transparent_objects(
             continue
 
         canvas[
-            i.pos[1]:i.pos[1] + i.size[0],
-            i.pos[0]:i.pos[0] + i.size[1],
+            i.pos[1]:i.pos[1] + i.size[1],
+            i.pos[0]:i.pos[0] + i.size[0],
             :
         ] = (
             canvas[
-                i.pos[1]:i.pos[1] + i.size[0],
-                i.pos[0]:i.pos[0] + i.size[1],
+                i.pos[1]:i.pos[1] + i.size[1],
+                i.pos[0]:i.pos[0] + i.size[0],
                 :
             ].astype(np.float64) * i.mask_inv
         ).astype(np.uint8)
 
         canvas[
-            i.pos[1]:i.pos[1] + i.size[0],
-            i.pos[0]:i.pos[0] + i.size[1],
+            i.pos[1]:i.pos[1] + i.size[1],
+            i.pos[0]:i.pos[0] + i.size[0],
             :
         ] += (i.img * i.mask).astype(np.uint8)
 
