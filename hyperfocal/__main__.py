@@ -671,11 +671,16 @@ def main():
     # layer 3 - gallery buttons WIP
     ################################################
 
-    def gallery_toggle_setting_cb(app: Dict[str, setting]):
+    def gallery_toggle_setting_cb(
+        app: Dict[str, setting],
+        button_ref: CanvasAlphaObject
+    ):
         if app['use_system_gallery']:
             app['use_system_gallery'] = False
+            button_ref.mask *= 0.5
         else:
             app['use_system_gallery'] = True
+            button_ref.mask /= 0.5
 
         print(f'use_system_gallery: {app["use_system_gallery"]}')
 
@@ -694,14 +699,31 @@ def main():
 
         app['resources_dir'] = res
         print(f'changed theme dir to "{res}"')
+        easygui.msgbox(
+            'You need to restart to apply the changes.', 'Restart required'
+        )
+
+    # prep to save the gallery toggle icon state
+    button_icon = open_image_with_alpha(f'{DATA_DIR}/icons/gallery_button.png')
+
+    # make it dimmer if its off
+    if not app_settings['use_system_gallery']:
+        alpha_mask = button_icon[1]
+        alpha_mask *= 0.5
+        button_icon = (button_icon[0], alpha_mask)
 
     gallery_toggle_setting = CanvasAlphaObject(
         np.array(
             (0.2, 0.15)
         ) * app_settings['preview_resolution'] - (25, 25),
-        *open_image_with_alpha(f'{DATA_DIR}/icons/gallery_button.png'),
-        lambda: gallery_toggle_setting_cb(app_settings),
+        *button_icon,
+        None,  # assigned below
         layer=1
+    )
+
+    gallery_toggle_setting.cb = lambda: gallery_toggle_setting_cb(
+        app_settings,
+        gallery_toggle_setting  # self ref to update the icon on click
     )
 
     gallery_change_dir_setting = CanvasAlphaObject(
