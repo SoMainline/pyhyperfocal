@@ -18,7 +18,7 @@ CV_VISIBLE_LAYER: int = 0
 def mouse_cb_global(*args):
     global CV_VISIBLE_OBJECTS, CV_VISIBLE_LAYER
 
-    # print(np.array(args[1:3]) / [720, 1280])
+    print(np.array(args[1:3]) / [720, 1280])
 
     for obj in CV_VISIBLE_OBJECTS:
         if obj.layer == CV_VISIBLE_LAYER:
@@ -61,7 +61,7 @@ class CanvasObject:
 
         elif event == cv2.EVENT_MOUSEMOVE:
             if self._mouse_hold:
-                pass  # for now
+                self._mouse_pos = (x, y)
 
         elif event == cv2.EVENT_LBUTTONUP:
             # this indentation crime to humanity is PEP8 compliant btw
@@ -108,7 +108,7 @@ def draw_objects(
     global CV_VISIBLE_LAYER
 
     # draw frame
-    # print(canvas.shape, frame.shape)
+    # this indentation crime to humanity is brought to you by PEP8
     if frame is not None:
         canvas_center = np.array(canvas.shape[:2]) // 2
         canvas_topleft = (
@@ -127,6 +127,7 @@ def draw_objects(
             :
         ] = frame
 
+    # draw objects
     for i in objects:
         if i.layer != CV_VISIBLE_LAYER:
             continue
@@ -148,7 +149,7 @@ def draw_transparent_objects(
     global CV_VISIBLE_LAYER
 
     # draw frame
-    # print(canvas.shape, frame.shape)
+    # this indentation crime to humanity is brought to you by PEP8
     if frame is not None:
         canvas_center = np.array(canvas.shape[:2]) // 2
         canvas_topleft = (
@@ -167,6 +168,7 @@ def draw_transparent_objects(
             :
         ] = frame
 
+    # draw objects
     for i in objects:
         if i.layer != CV_VISIBLE_LAYER:
             continue
