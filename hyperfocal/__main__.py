@@ -24,9 +24,10 @@ from glob import glob
 import subprocess
 import pathlib
 import easygui
-from typing import Tuple, Dict, TypeVar, List, Callable, Generic, Union
+from typing import Tuple, Dict, TypeVar, List, Generic
 
 from . import ui
+from . import img_proc
 
 # types
 T = TypeVar('T')
@@ -96,80 +97,6 @@ def combine_paths(base_path: str, *other_paths: List[str]) -> str:
     )
 
 ###############################################################################
-# IMAGE PROCESSING STUFF
-###############################################################################
-
-
-def rotate_bound(image, angle):
-    # grab the dimensions of the image and then determine the
-    # center
-    (h, w) = image.shape[:2]
-    (cX, cY) = (w / 2, h / 2)
-
-    # grab the rotation matrix (applying the negative of the
-    # angle to rotate clockwise), then grab the sine and cosine
-    # (i.e., the rotation components of the matrix)
-    M = cv2.getRotationMatrix2D((cX, cY), -angle, 1.0)
-    cos = np.abs(M[0, 0])
-    sin = np.abs(M[0, 1])
-
-    # compute the new bounding dimensions of the image
-    nW = int((h * sin) + (w * cos))
-    nH = int((h * cos) + (w * sin))
-
-    # adjust the rotation matrix to take into account translation
-    M[0, 2] += (nW / 2) - cX
-    M[1, 2] += (nH / 2) - cY
-
-    # perform the actual rotation and return the image
-    return cv2.warpAffine(image, M, (nW, nH))
-
-
-CV_PHOTO_FILTER: Union[Callable[[np.ndarray], np.ndarray], None] = None
-
-
-def process_preview(
-    frame: np.ndarray,
-    config: Dict[str, setting],
-    canvas_res: Tuple[int, int]
-) -> np.ndarray:
-    global CV_PHOTO_FILTER
-
-    if config['rotate'] != 0:
-        frame = rotate_bound(frame, config['rotate'])
-
-    # print(frame.shape[:2][::-1], canvas_res)
-    if (np.array(canvas_res) <= np.array(frame.shape[:2][::-1])).any():
-        frame = cv2.resize(
-            frame, tuple(canvas_res)
-        )
-
-    if CV_PHOTO_FILTER is not None:
-        frame = CV_PHOTO_FILTER(frame)
-
-    return frame
-
-
-def open_image_with_alpha(path: str) -> Tuple[np.ndarray, np.ndarray]:
-    img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-
-    img_alpha = img[:, :, 3]
-    img_rgb = img[:, :, :3]
-    return (img_rgb, img_alpha / 255)
-
-
-def process_photo(img: np.ndarray, config: Dict[str, setting]) -> np.ndarray:
-    global CV_PHOTO_FILTER
-
-    if config['rotate'] != 0:
-        img = rotate_bound(img, config['rotate'])
-
-    if CV_PHOTO_FILTER is not None:
-        img = CV_PHOTO_FILTER(img)
-
-    return img
-
-###############################################################################
 # FUNCTIONALITY STUFF
 ###############################################################################
 
@@ -186,12 +113,9 @@ def take_photo(
     config: ref[Dict[str, setting]],
     gallery_button: ui.CanvasObject
 ) -> bool:
-    save_path = save_dir
 
-    print(save_path, save_dir)
-
-    if not os.path.exists(save_path):
-        os.mkdir(save_path)
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
 
     ret, frame = vod.get().read()
 
@@ -200,12 +124,12 @@ def take_photo(
 
     img_save_path = os.path.normpath(
         os.path.join(
-            save_path,
+            save_dir,
             f'IMG_{datetime.now().strftime("%Y%m%d_%H%M%S_%f")}_raw.png'
         )
     )
 
-    image = process_photo(frame, config.get())
+    image = img_proc.process_photo(frame, config.get())
 
     cv2.imwrite(
         img_save_path,
@@ -327,7 +251,9 @@ def gallery(
             np.array(
                 (0.1, 0.1)
             ) * app_settings['preview_resolution'] - (25, 25),
-            *open_image_with_alpha(f'{DATA_DIR}/icons/back_button.png'),
+            *img_proc.open_image_with_alpha(
+                f'{DATA_DIR}/icons/back_button.png'
+            ),
             lambda: killer_ref.set(True),
             layer=3
         ),
@@ -350,7 +276,7 @@ def gallery(
     while 1:
         canvas = np.zeros(canvas_shape, dtype=np.uint8)
 
-        frame = process_preview(
+        frame = img_proc.process_preview(
             curr_img.get(),
             {'rotate': 0},  # dummy camera config
             app_settings['preview_resolution']
@@ -465,7 +391,7 @@ def main():
 
     take_photo_button = ui.CanvasAlphaObject(
         photo_bt_p,
-        *open_image_with_alpha(f'{DATA_DIR}/icons/photo_button.png'),
+        *img_proc.open_image_with_alpha(f'{DATA_DIR}/icons/photo_button.png'),
         lambda: take_photo(
             app_settings['gallery_dir'],
             curr_vod_ref,
@@ -476,7 +402,9 @@ def main():
 
     settings_button = ui.CanvasAlphaObject(
         settings_bt_p,
-        *open_image_with_alpha(f'{DATA_DIR}/icons/settings_button.png'),
+        *img_proc.open_image_with_alpha(
+            f'{DATA_DIR}/icons/settings_button.png'
+        ),
         None
     )
 
@@ -525,7 +453,9 @@ def main():
         )
 
     # prep to save the gallery toggle icon state
-    button_icon = open_image_with_alpha(f'{DATA_DIR}/icons/gallery_button.png')
+    button_icon = img_proc.open_image_with_alpha(
+        f'{DATA_DIR}/icons/gallery_button.png'
+    )
 
     # make it dimmer if its off
     if not app_settings['use_system_gallery']:
@@ -551,7 +481,9 @@ def main():
         np.array(
             (0.3, 0.15)
         ) * app_settings['preview_resolution'] - (25, 25),
-        *open_image_with_alpha(f'{DATA_DIR}/icons/gallerydir_button.png'),
+        *img_proc.open_image_with_alpha(
+            f'{DATA_DIR}/icons/gallerydir_button.png'
+        ),
         lambda: gallery_change_dir_setting_cb(app_settings),
         layer=1
     )
@@ -560,7 +492,7 @@ def main():
         np.array(
             (0.4, 0.15)
         ) * app_settings['preview_resolution'] - (25, 25),
-        *open_image_with_alpha(f'{DATA_DIR}/icons/theme_button.png'),
+        *img_proc.open_image_with_alpha(f'{DATA_DIR}/icons/theme_button.png'),
         lambda: theme_change_dir_setting_cb(app_settings),
         layer=1
     )
@@ -585,7 +517,7 @@ def main():
     if len(cameras) > 1:
         cycle_cameras_button = ui.CanvasAlphaObject(
             change_cam_bt_p,
-            *open_image_with_alpha(
+            *img_proc.open_image_with_alpha(
                 f'{DATA_DIR}/icons/change_camera_button.png'
             ),
             lambda: cycle_cameras(
@@ -621,7 +553,7 @@ def main():
 
         canvas = np.zeros(canvas_shape, dtype=np.uint8)
 
-        frame = process_preview(
+        frame = img_proc.process_preview(
             frame, curr_camcfg_ref.get(), app_settings['preview_resolution']
         )
 
