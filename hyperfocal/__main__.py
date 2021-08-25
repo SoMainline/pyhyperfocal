@@ -493,17 +493,100 @@ def main():
         layer=1
     )
 
+    ################################################
+    # layer 0 - normal app overlay
+    # layer 1 - settings
+    # layer 2 - resolution overlays WIP
+    # layer 3 - gallery buttons
+    ################################################
+
+    def set_filter(filt: Union[Callable[[np.ndarray], np.ndarray], None]):
+        img_proc.CV_PHOTO_FILTER = filt
+        print(f'filter set to: {filt}')
+
+    # filters
+    clear_filter = ui.CanvasAlphaObject(
+        np.array(
+            (0.07, 0.75)
+        ) * app_settings['preview_resolution'] - (40, 15),
+        cv2.putText(
+            np.zeros((30, 80, 3), dtype=np.uint8),
+            "clear",
+            (0, 30),
+            cv2.FONT_HERSHEY_PLAIN,
+            1,
+            (255, 255, 255)
+        ),
+        np.ones((30, 80)) * 0.4,
+        lambda: set_filter(None)
+    )
+
+    t1000_filter = ui.CanvasAlphaObject(
+        np.array(
+            (0.14, 0.75)
+        ) * app_settings['preview_resolution'] - (0, 15),
+        cv2.putText(
+            np.zeros((30, 80, 3), dtype=np.uint8),
+            "times1000",
+            (0, 30),
+            cv2.FONT_HERSHEY_PLAIN,
+            1,
+            (255, 255, 255)
+        ),
+        np.ones((30, 80)) * 0.4,
+        lambda: set_filter(filters.times1000)
+    )
+
+    t2000_filter = ui.CanvasAlphaObject(
+        np.array(
+            (0.26, 0.75)
+        ) * app_settings['preview_resolution'] - (0, 15),
+        cv2.putText(
+            np.zeros((30, 80, 3), dtype=np.uint8),
+            "times2000",
+            (0, 30),
+            cv2.FONT_HERSHEY_PLAIN,
+            1,
+            (255, 255, 255)
+        ),
+        np.ones((30, 80)) * 0.4,
+        lambda: set_filter(filters.times2000)
+    )
+
+    gray_filter = ui.CanvasAlphaObject(
+        np.array(
+            (0.38, 0.75)
+        ) * app_settings['preview_resolution'] - (0, 15),
+        cv2.putText(
+            np.zeros((30, 80, 3), dtype=np.uint8),
+            "gray",
+            (0, 30),
+            cv2.FONT_HERSHEY_PLAIN,
+            1,
+            (255, 255, 255)
+        ),
+        np.ones((30, 80)) * 0.4,
+        lambda: set_filter(filters.grayscale)
+    )
+
+    ################################################
     # button lists for rendering
+    ################################################
+
     buttons_opaque = [
-        # layer 0
+        # layer 0 - main overlay
         gallery_button,
     ]
 
     buttons_transparent = [
-        # layer 0
+        # layer 0 - main overlay
         take_photo_button,
         settings_button,
-        # layer 1
+        clear_filter,
+        t1000_filter,
+        t2000_filter,
+        gray_filter,
+        # layer 1 - settings
         gallery_toggle_setting,
         gallery_change_dir_setting,
         theme_change_dir_setting,
