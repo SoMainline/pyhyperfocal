@@ -125,11 +125,16 @@ def rotate_bound(image, angle):
     return cv2.warpAffine(image, M, (nW, nH))
 
 
+CV_PHOTO_FILTER: Union[Callable[[np.ndarray], np.ndarray], None] = None
+
+
 def process_preview(
     frame: np.ndarray,
     config: Dict[str, setting],
     canvas_res: Tuple[int, int]
 ) -> np.ndarray:
+    global CV_PHOTO_FILTER
+
     if config['rotate'] != 0:
         frame = rotate_bound(frame, config['rotate'])
 
@@ -138,6 +143,9 @@ def process_preview(
         frame = cv2.resize(
             frame, tuple(canvas_res)
         )
+
+    if CV_PHOTO_FILTER is not None:
+        frame = CV_PHOTO_FILTER(frame)
 
     return frame
 
