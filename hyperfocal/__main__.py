@@ -505,14 +505,16 @@ def main():
         print(f'filter set to: {filt}')
 
     # filters
+    text_pos = (1, 15)
+
     clear_filter = ui.CanvasAlphaObject(
         np.array(
-            (0.07, 0.75)
-        ) * app_settings['preview_resolution'] - (40, 15),
+            (0.02, 0.75)
+        ) * app_settings['preview_resolution'] - (0, 15),
         cv2.putText(
             np.zeros((30, 80, 3), dtype=np.uint8),
             "clear",
-            (0, 30),
+            text_pos,
             cv2.FONT_HERSHEY_PLAIN,
             1,
             (255, 255, 255)
@@ -528,7 +530,7 @@ def main():
         cv2.putText(
             np.zeros((30, 80, 3), dtype=np.uint8),
             "times1000",
-            (0, 30),
+            text_pos,
             cv2.FONT_HERSHEY_PLAIN,
             1,
             (255, 255, 255)
@@ -544,7 +546,7 @@ def main():
         cv2.putText(
             np.zeros((30, 80, 3), dtype=np.uint8),
             "times2000",
-            (0, 30),
+            text_pos,
             cv2.FONT_HERSHEY_PLAIN,
             1,
             (255, 255, 255)
@@ -553,14 +555,30 @@ def main():
         lambda: set_filter(filters.times2000)
     )
 
-    gray_filter = ui.CanvasAlphaObject(
+    power2_filter = ui.CanvasAlphaObject(
         np.array(
             (0.38, 0.75)
         ) * app_settings['preview_resolution'] - (0, 15),
         cv2.putText(
             np.zeros((30, 80, 3), dtype=np.uint8),
+            "power2",
+            text_pos,
+            cv2.FONT_HERSHEY_PLAIN,
+            1,
+            (255, 255, 255)
+        ),
+        np.ones((30, 80)) * 0.4,
+        lambda: set_filter(filters.power2)
+    )
+
+    gray_filter = ui.CanvasAlphaObject(
+        np.array(
+            (0.50, 0.75)
+        ) * app_settings['preview_resolution'] - (0, 15),
+        cv2.putText(
+            np.zeros((30, 80, 3), dtype=np.uint8),
             "gray",
-            (0, 30),
+            text_pos,
             cv2.FONT_HERSHEY_PLAIN,
             1,
             (255, 255, 255)
@@ -585,6 +603,7 @@ def main():
         clear_filter,
         t1000_filter,
         t2000_filter,
+        power2_filter,
         gray_filter,
         # layer 1 - settings
         gallery_toggle_setting,

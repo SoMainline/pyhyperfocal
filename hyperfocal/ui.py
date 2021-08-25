@@ -18,7 +18,7 @@ CV_VISIBLE_LAYER: int = 0
 def mouse_cb_global(*args):
     global CV_VISIBLE_OBJECTS, CV_VISIBLE_LAYER
 
-    print(np.array(args[1:3]) / [720, 1280])
+    # print(np.array(args[1:3]) / [720, 1280])
 
     for obj in CV_VISIBLE_OBJECTS:
         if obj.layer == CV_VISIBLE_LAYER:
