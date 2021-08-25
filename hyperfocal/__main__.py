@@ -24,10 +24,11 @@ from glob import glob
 import subprocess
 import pathlib
 import easygui
-from typing import Tuple, Dict, TypeVar, List, Generic
+from typing import Tuple, Dict, TypeVar, List, Generic, Union, Callable
 
 from . import ui
 from . import img_proc
+from . import filters
 
 # types
 T = TypeVar('T')
@@ -205,7 +206,7 @@ def gallery(
         # this may break on other distros
         subprocess.call(('xdg-open', image_paths[0]))
 
-        ui.CV_VISIBLE_LAYER = 0
+        ui.set_layer(0)
         return True
 
     curr_img = ref(cv2.imread(image_paths[0]))
@@ -247,6 +248,7 @@ def gallery(
     canvas_shape = (*app_settings['preview_resolution'][::-1], 3)
 
     buttons_transparent = [
+        # layer 3  - gallery
         ui.CanvasAlphaObject(
             np.array(
                 (0.1, 0.1)
@@ -291,7 +293,7 @@ def gallery(
         if key == 27 or key == ord('q') or killer_ref.get():
             break
 
-    ui.CV_VISIBLE_LAYER = 0
+    ui.set_layer(0)
     return True
 
 ###############################################################################
@@ -347,24 +349,9 @@ def main():
 
     # vod = cv2.VideoCapture(cam_idx)
 
+    # setting up app window
     cv2.namedWindow(WINDOW_NAME)
     cv2.setMouseCallback(WINDOW_NAME, ui.mouse_cb_global)
-
-    # coordinates
-    # this indentation awfulness is brought to you by PEP8
-    last_img_p = np.array(
-        (0.25, 0.85)
-    ) * app_settings['preview_resolution'] - (35, 35)
-    photo_bt_p = np.array(
-        (0.5, 0.85)
-    ) * app_settings['preview_resolution'] - (50, 50)
-    change_cam_bt_p = np.array(
-        (0.75, 0.85)
-    ) * app_settings['preview_resolution'] - (35, 35)
-
-    settings_bt_p = np.array(
-        (0.9, 0.07)
-    ) * app_settings['preview_resolution'] - (25, 25)
 
     ################################################
     # layer 0 - normal app overlay
@@ -373,9 +360,12 @@ def main():
     # layer 3 - gallery buttons
     ################################################
 
-    # buttons
+    # main buttons
+
     gallery_button = ui.CanvasObject(
-        last_img_p,
+        np.array(
+            (0.25, 0.85)
+        ) * app_settings['preview_resolution'] - (35, 35),
         np.ones((70, 70, 3), dtype=np.uint8) * 150,
         lambda: ui.set_layer(3)
     )
@@ -390,7 +380,9 @@ def main():
         )
 
     take_photo_button = ui.CanvasAlphaObject(
-        photo_bt_p,
+        np.array(
+            (0.5, 0.85)
+        ) * app_settings['preview_resolution'] - (50, 50),
         *img_proc.open_image_with_alpha(f'{DATA_DIR}/icons/photo_button.png'),
         lambda: take_photo(
             app_settings['gallery_dir'],
@@ -401,7 +393,9 @@ def main():
     )
 
     settings_button = ui.CanvasAlphaObject(
-        settings_bt_p,
+        np.array(
+            (0.9, 0.07)
+        ) * app_settings['preview_resolution'] - (25, 25),
         *img_proc.open_image_with_alpha(
             f'{DATA_DIR}/icons/settings_button.png'
         ),
@@ -419,6 +413,8 @@ def main():
     # layer 2 - resolution overlays WIP
     # layer 3 - gallery buttons
     ################################################
+
+    # settings tab
 
     def gallery_toggle_setting_cb(
         app: Dict[str, setting],
@@ -516,7 +512,9 @@ def main():
     # don't add this function if only 1 camera is available
     if len(cameras) > 1:
         cycle_cameras_button = ui.CanvasAlphaObject(
-            change_cam_bt_p,
+            np.array(
+                (0.75, 0.85)
+            ) * app_settings['preview_resolution'] - (35, 35),
             *img_proc.open_image_with_alpha(
                 f'{DATA_DIR}/icons/change_camera_button.png'
             ),
@@ -533,7 +531,10 @@ def main():
 
     canvas_shape = (*app_settings['preview_resolution'][::-1], 3)
 
-    # runtime loop
+    #############################################
+    # main runtime loop
+    #############################################
+
     while 1:
 
         ret, frame = curr_vod_ref.get().read()
