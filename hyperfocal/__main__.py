@@ -346,6 +346,7 @@ def main():
     curr_camcfg_idx_ref = ref(curr_camcfg_idx)
     curr_vod_ref = ref(vod)
     camera_lock_ref = ref(False)
+    canvas_shape = (*app_settings['preview_resolution'][::-1], 3)
 
     # vod = cv2.VideoCapture(cam_idx)
 
@@ -419,7 +420,7 @@ def main():
     def gallery_toggle_setting_cb(
         app: Dict[str, setting],
         button_ref: ui.CanvasAlphaObject
-    ):
+    ) -> bool:
         if app['use_system_gallery']:
             app['use_system_gallery'] = False
             button_ref.mask *= 0.5
@@ -428,25 +429,61 @@ def main():
             button_ref.mask /= 0.5
 
         print(f'use_system_gallery: {app["use_system_gallery"]}')
+        return True
 
-    def gallery_change_dir_setting_cb(app: Dict[str, setting]):
+    def gallery_change_dir_setting_cb(app: Dict[str, setting]) -> bool:
         res = easygui.diropenbox(default=True)
         if res is None:
-            return
+            return False
 
         app['gallery_dir'] = res
         print(f'changed gallery dir to "{res}"')
 
-    def theme_change_dir_setting_cb(app: Dict[str, setting]):
+        return True
+
+    def theme_change_dir_setting_cb(app: Dict[str, setting]) -> bool:
         res = easygui.diropenbox(default=True)
         if res is None:
-            return
+            return False
 
         app['resources_dir'] = res
         print(f'changed theme dir to "{res}"')
         easygui.msgbox(
             'You need to restart to apply the changes.', 'Restart required'
         )
+
+        return True
+
+    OVERLAY_IMG: Tuple[np.ndarray, np.ndarray] = None
+
+    def toggle_grid(
+        app: Dict[str, setting],
+        button: ui.CanvasAlphaObject
+    ) -> bool:
+        nonlocal OVERLAY_IMG
+
+        if OVERLAY_IMG:
+            button.mask *= 0.5
+            app['use_grid'] = False
+            OVERLAY_IMG = None
+
+        else:
+            button.mask /= 0.5
+            app['use_grid'] = True
+            x = img_proc.open_image_with_alpha(
+                f'{DATA_DIR}/imgs/grid.png'
+            )
+            y = np.stack((x[1], ) * 3, axis=-1)
+            OVERLAY_IMG = (x[0], y)
+
+        return True
+
+    if app_settings['use_grid']:
+        x = img_proc.open_image_with_alpha(
+            f'{DATA_DIR}/imgs/grid.png'
+        )
+        y = np.stack((x[1], ) * 3, axis=-1)
+        OVERLAY_IMG = (x[0], y)
 
     # prep to save the gallery toggle icon state
     button_icon = img_proc.open_image_with_alpha(
@@ -490,6 +527,27 @@ def main():
         ) * app_settings['preview_resolution'] - (25, 25),
         *img_proc.open_image_with_alpha(f'{DATA_DIR}/icons/theme_button.png'),
         lambda: theme_change_dir_setting_cb(app_settings),
+        layer=1
+    )
+
+    toggle_grid_setting = ui.CanvasAlphaObject(
+        np.array(
+            (0.5, 0.15)
+        ) * app_settings['preview_resolution'] - (25, 25),
+        *img_proc.open_image_with_alpha(f'{DATA_DIR}/icons/grid_button.png'),
+        None,
+        layer=1
+    )
+    toggle_grid_setting.cb = lambda: toggle_grid(
+        app_settings, toggle_grid_setting
+    )
+
+    # has to be created here
+    settings_anywhere_button = ui.CanvasAlphaObject(
+        (0, 0),
+        np.zeros(canvas_shape, dtype=np.uint8),
+        np.zeros(canvas_shape[:2], dtype=np.float32),
+        lambda: ui.set_layer(0, settings_button),
         layer=1
     )
 
@@ -606,9 +664,11 @@ def main():
         power2_filter,
         gray_filter,
         # layer 1 - settings
+        settings_anywhere_button,
         gallery_toggle_setting,
         gallery_change_dir_setting,
         theme_change_dir_setting,
+        toggle_grid_setting,
     ]
 
     # don't add this function if only 1 camera is available
@@ -630,8 +690,6 @@ def main():
         )
 
         buttons_transparent.append(cycle_cameras_button)
-
-    canvas_shape = (*app_settings['preview_resolution'][::-1], 3)
 
     #############################################
     # main runtime loop
@@ -664,6 +722,35 @@ def main():
         image = ui.draw_transparent_objects(
             image, None, buttons_transparent
         )
+
+        # temp draw overlay logic
+        if OVERLAY_IMG is not None:
+            canvas_center = np.array(image.shape[:2]) // 2
+            canvas_topleft = (
+                canvas_center - np.array(OVERLAY_IMG[0].shape[:2]) / 2
+            ).astype(int)
+
+            canvas_bottomright = (
+                canvas_center + np.array(OVERLAY_IMG[0].shape[:2]) / 2
+            ).astype(int)
+
+            image[
+                canvas_topleft[0]:canvas_bottomright[0],
+                canvas_topleft[1]:canvas_bottomright[1],
+                :
+            ] = (
+                image[
+                    canvas_topleft[0]:canvas_bottomright[0],
+                    canvas_topleft[1]:canvas_bottomright[1],
+                    :
+                ].astype(np.float64) * (1 - OVERLAY_IMG[1])
+            ).astype(np.uint8)
+
+            image[
+                canvas_topleft[0]:canvas_bottomright[0],
+                canvas_topleft[1]:canvas_bottomright[1],
+                :
+            ] += (OVERLAY_IMG[0] * OVERLAY_IMG[1]).astype(np.uint8)
 
         cv2.imshow(WINDOW_NAME, image)
 
