@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from typing import Tuple, TypeVar, List, Callable, Union
+from copy import copy
 
 ###############################################################################
 # UI STUFF
@@ -20,9 +21,16 @@ def mouse_cb_global(*args):
 
     # print(np.array(args[1:3]) / [720, 1280])
 
+    target_layer = copy(CV_VISIBLE_LAYER)
+
     for obj in CV_VISIBLE_OBJECTS:
-        if obj.layer == CV_VISIBLE_LAYER:
-            obj._mouse_cb(*args)
+        if obj.layer == target_layer:
+            x = obj._mouse_cb(*args)
+            # print(x, obj.cb)
+            if x is not None:
+                break
+
+    del target_layer
 
 
 # settings button callback
@@ -53,15 +61,17 @@ class CanvasObject:
         self._mouse_hold = False
         CV_VISIBLE_OBJECTS.append(self)
 
-    def _mouse_cb(self, event: int, x: int, y: int, *rest):
+    def _mouse_cb(self, event: int, x: int, y: int, *rest) -> bool:
         # print(self.__class__.__name__, self.pos, self._mouse_pos)
+        self._mouse_pos = (x, y)
+
         if event == cv2.EVENT_LBUTTONDOWN:
             self._mouse_hold = True
             self._mouse_pos = (x, y)
 
         elif event == cv2.EVENT_MOUSEMOVE:
-            if self._mouse_hold:
-                self._mouse_pos = (x, y)
+            # if self._mouse_hold:
+            pass
 
         elif event == cv2.EVENT_LBUTTONUP:
             # this indentation crime to humanity is PEP8 compliant btw
@@ -70,7 +80,7 @@ class CanvasObject:
             ).all() and (
                 self.pos + self.size >= self._mouse_pos
             ).all():
-                self.cb()
+                return self.cb()
 
             # print(
             #     (
