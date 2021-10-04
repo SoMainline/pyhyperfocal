@@ -442,7 +442,7 @@ def main():
         return True
 
     def gallery_change_dir_setting_cb(app: Dict[str, setting]) -> bool:
-        res = easygui.diropenbox(default=True)
+        res = easygui.diropenbox(default=True, msg="choose gallery dir")
         if res is None:
             return False
 
@@ -452,7 +452,7 @@ def main():
         return True
 
     def theme_change_dir_setting_cb(app: Dict[str, setting]) -> bool:
-        res = easygui.diropenbox(default=True)
+        res = easygui.diropenbox(default=True, msg="choose theme dir")
         if res is None:
             return False
 
@@ -705,7 +705,7 @@ def main():
     # main runtime loop
     #############################################
 
-    while 1:
+    while cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) > 0:
 
         ret, frame = curr_vod_ref.get().read()
 
