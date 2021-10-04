@@ -366,11 +366,18 @@ def main():
 
     # main buttons
 
-    gallery_button = ui.CanvasObject(
+    gallery_button = ui.CanvasAlphaObject(
         np.array(
             (0.25, 0.85)
         ) * app_settings['preview_resolution'] - (35, 35),
         np.ones((70, 70, 3), dtype=np.uint8) * 150,
+        cv2.circle(
+            np.zeros((70, 70), dtype=np.uint8),
+            (35, 35),
+            35,
+            255,
+            -1
+        ) / 255,
         lambda: ui.set_layer(3)
     )
 
@@ -654,11 +661,11 @@ def main():
 
     buttons_opaque = [
         # layer 0 - main overlay
-        gallery_button,
     ]
 
     buttons_transparent = [
         # layer 0 - main overlay
+        gallery_button,
         take_photo_button,
         settings_button,
         clear_filter,
