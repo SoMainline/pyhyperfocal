@@ -172,7 +172,7 @@ def cycle_cameras(
     return True
 
 
-def _get_images(
+def _get_image_paths(
     dir_path: str
 ) -> List[str]:
     image_paths = []
@@ -200,7 +200,7 @@ def gallery(
     DATA_DIR = combine_paths(ROOT_DIR, app_settings['resources_dir'])
     gallery_dir = combine_paths(ROOT_DIR, app_settings['gallery_dir'])
 
-    image_paths = _get_images(gallery_dir)
+    image_paths = _get_image_paths(gallery_dir)
 
     if app_settings['use_system_gallery']:
         # this may break on other distros
@@ -303,6 +303,9 @@ def gallery(
 
 def main():
 
+    ###########################################################################
+    # arg parse
+    ###########################################################################
     args = docopt(__doc__, version=__version__)
 
     with open(args['<cfg_path>'], 'r') as f:
@@ -372,10 +375,10 @@ def main():
     )
 
     # try to make a last photo preview if possible
-    images = _get_images(app_settings['gallery_dir'])
-    if len(images):
+    images_paths = _get_image_paths(app_settings['gallery_dir'])
+    if len(images_paths):
         gallery_button.img = cv2.resize(
-            cv2.imread(images[0]),
+            cv2.imread(images_paths[0]),
             gallery_button.size,
             interpolation=cv2.INTER_AREA
         )
