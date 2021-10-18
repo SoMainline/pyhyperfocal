@@ -1,14 +1,14 @@
 {
     "app": {
         "device": "not a phone x64",
-        "gallery_dir": "/home/okawo/Documents/okawo/SoMainline/gigapixels/Camera",
+        "gallery_dir": "./hyperfocal",
         "preview_resolution": [
             720,
             1280
         ],
         "resources_dir": "./data",
         "use_grid": false,
-        "use_system_gallery": true
+        "use_system_gallery": false
     },
     "cameras": [
         {
