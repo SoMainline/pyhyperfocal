@@ -63,9 +63,12 @@ def process_preview(
 def open_image_with_alpha(path: str) -> Tuple[np.ndarray, np.ndarray]:
     img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
 
-    img_alpha = img[:, :, 3]
-    img_rgb = img[:, :, :3]
-    return (img_rgb, img_alpha / 255)
+    if len(img.shape) == 3 and img.shape[2] == 4:
+        img_alpha = img[:, :, 3]
+        img_rgb = img[:, :, :3]
+        return (img_rgb, img_alpha / 255)
+
+    return img, np.ones(img.shape[:2], dtype=np.float32)
 
 
 def process_photo(img: np.ndarray, config: Dict[str, setting]) -> np.ndarray:
