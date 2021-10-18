@@ -555,11 +555,20 @@ def main():
         layer=1
     )
 
+    grid_button_icon = img_proc.open_image_with_alpha(
+        f'{DATA_DIR}/icons/grid_button.png'
+    )
+
+    if not app_settings['use_grid']:
+        alpha_mask = grid_button_icon[1]
+        alpha_mask *= 0.5
+        grid_button_icon = (grid_button_icon[0], alpha_mask)
+
     toggle_grid_setting = ui.CanvasAlphaObject(
         np.array(
             (0.5, 0.15)
         ) * app_settings['preview_resolution'] - (25, 25),
-        *img_proc.open_image_with_alpha(f'{DATA_DIR}/icons/grid_button.png'),
+        *grid_button_icon,
         None,
         layer=1
     )
