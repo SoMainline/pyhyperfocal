@@ -441,13 +441,28 @@ def main():
         print(f'use_system_gallery: {app["use_system_gallery"]}')
         return True
 
-    def gallery_change_dir_setting_cb(app: Dict[str, setting]) -> bool:
+    def gallery_change_dir_setting_cb(
+        app: Dict[str, setting],
+        gallery_button: ui.CanvasAlphaObject
+    ) -> bool:
+
         res = easygui.diropenbox(default=True, msg="choose gallery dir")
         if res is None:
             return False
 
         app['gallery_dir'] = res
         print(f'changed gallery dir to "{res}"')
+
+        # if there are any images, load the first one for preview
+        img_paths = _get_image_paths(app['gallery_dir'])
+        if img_paths:
+            img = img_proc.open_image_with_alpha(
+                img_paths[0]
+            )
+            # only update the image, not the mask
+            gallery_button.img = cv2.resize(
+                img[0], gallery_button.size, interpolation=cv2.INTER_AREA
+            )
 
         return True
 
@@ -527,7 +542,7 @@ def main():
         *img_proc.open_image_with_alpha(
             f'{DATA_DIR}/icons/gallerydir_button.png'
         ),
-        lambda: gallery_change_dir_setting_cb(app_settings),
+        lambda: gallery_change_dir_setting_cb(app_settings, gallery_button),
         layer=1
     )
 
