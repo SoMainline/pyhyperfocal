@@ -495,20 +495,20 @@ def main():
         else:
             button.mask /= 0.5
             app['use_grid'] = True
-            x = img_proc.open_image_with_alpha(
+            img_pair = img_proc.open_image_with_alpha(
                 f'{DATA_DIR}/imgs/grid.png'
             )
-            y = np.stack((x[1], ) * 3, axis=-1)
-            OVERLAY_IMG = (x[0], y)
+            img_mask = np.stack((img_pair[1], ) * 3, axis=-1)
+            OVERLAY_IMG = (img_pair[0], img_mask)
 
         return True
 
     if app_settings['use_grid']:
-        x = img_proc.open_image_with_alpha(
+        img_pair = img_proc.open_image_with_alpha(
             f'{DATA_DIR}/imgs/grid.png'
         )
-        y = np.stack((x[1], ) * 3, axis=-1)
-        OVERLAY_IMG = (x[0], y)
+        img_mask = np.stack((img_pair[1], ) * 3, axis=-1)
+        OVERLAY_IMG = (img_pair[0], img_mask)
 
     # prep to save the gallery toggle icon state
     button_icon = img_proc.open_image_with_alpha(
