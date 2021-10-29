@@ -1,39 +1,12 @@
 {
-    "app": {
-        "device": "not a phone x64",
-        "gallery_dir": "./hyperfocal",
-        "preview_resolution": [
-            720,
-            1280
-        ],
-        "resources_dir": "./data",
-        "use_grid": false,
-        "use_system_gallery": false
-    },
-    "cameras": [
-        {
-            "capture_resolution": [
-                1920,
-                920
-            ],
-            "default": true,
-            "fps": 54,
-            "id": 0,
-            "name": "valve index",
-            "need_v4l2_setup": false,
-            "rotate": 90
-        },
-        {
-            "capture_resolution": [
-                640,
-                480
-            ],
-            "default": false,
-            "fps": 30,
-            "id": 2,
-            "name": "pseye",
-            "need_v4l2_setup": false,
-            "rotate": 0
-        }
-    ]
+    "backend_dir": "<replace with a proper back end path>",
+    "device": "not a phone x64",
+    "gallery_dir": "./Camera",
+    "preview_resolution": [
+        720,
+        1280
+    ],
+    "resources_dir": "./data",
+    "use_grid": false,
+    "use_system_gallery": true
 }
