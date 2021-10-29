@@ -535,22 +535,194 @@ def main():
     toggle_grid_setting = ui.CanvasAlphaObject(
         np.array(
             (0.5, 0.15)
-        ) * app_settings['preview_resolution'] - (25, 25),
+        ) * app_settings['preview_resolution'],
         *grid_button_icon,
         None,
-        layer=1
+        layer=1,
+        icon_name="grid_button.png"
     )
+    toggle_grid_setting.offset_by_img_size()
+
     toggle_grid_setting.cb = lambda: toggle_grid(
         app_settings, toggle_grid_setting
     )
 
+    # backend info shit
+
+    show_backend_info_button = ui.CanvasAlphaObject(
+        np.array(
+            (0.6, 0.15)
+        ) * app_settings['preview_resolution'],
+        *img_proc.open_image_with_alpha(
+            f'{DATA_DIR}/icons/backend_info.png'
+        ),
+        lambda: (ui.set_layer(2, settings_button), 'fuck you'),  # weird fix...
+        layer=1,
+        icon_name="backend_info.png"
+    )
+    show_backend_info_button.offset_by_img_size()
+
+    def change_backend(app: str):
+        res = easygui.diropenbox(default=True, msg="choose back end dir")
+        if res is None:
+            return
+
+        # verify back end first
+        list_all = glob(f"{res}/list_all")
+        get_info = glob(f"{res}/get_info")
+        setup = glob(f"{res}/setup")
+        cleanup = glob(f"{res}/cleanup")
+
+        if not len(list_all) or not len(get_info) or not len(setup) or not len(cleanup):
+            print(f'error resolving back end')
+            easygui.msgbox(
+                'Bad back end directory, could not resolve back end members within provided path.',
+                'Bad back end dir'
+            )
+            return
+
+        app['backend_dir'] = res
+        print(f'changed theme dir to "{res}"')
+        easygui.msgbox(
+            'You need to restart to apply the changes.', 'Restart required'
+        )
+
+    change_backend_button = ui.CanvasAlphaObject(
+        np.array(
+            (0.7, 0.15)
+        ) * app_settings['preview_resolution'],
+        *img_proc.open_image_with_alpha(
+            f'{DATA_DIR}/icons/backend_change.png'
+        ),
+        lambda: change_backend(app_settings),
+        layer=1,
+        icon_name="backend_change.png"
+    )
+    change_backend_button.offset_by_img_size()
+
     # has to be created here
-    settings_anywhere_button = ui.CanvasAlphaObject(
+    settings_anywhere_button = ui.CanvasAlphaObject( # noqa only needs to be initialized
         (0, 0),
         np.zeros(canvas_shape, dtype=np.uint8),
         np.zeros(canvas_shape[:2], dtype=np.float32),
-        lambda: ui.set_layer(0, settings_button),
+        lambda: (ui.set_layer(0, settings_button), print('fadsafd')),
         layer=1
+    )
+
+    #################################################
+    # layer 2 - awful back end info panel, its really awful
+    #################################################
+
+    size = (
+        np.array(
+            (0.8, 0.7)
+        ) * app_settings['preview_resolution']
+    ).astype(int)
+
+    img = np.zeros(
+        (*size[::-1], 3),
+        dtype=np.uint8
+    )
+
+    img2 = np.ones(
+        size[::-1],
+        dtype=np.float64
+    ) * 0.7
+
+    backend_info_resp = hyperfocal_backend.get_backend_info()
+
+    font_args = [cv2.FONT_HERSHEY_SIMPLEX, 1]
+
+    text = f"name: {backend_info_resp['name']}"
+    pos = (size * (0.05, 0.05)).astype(int)
+    img = cv2.putText(
+        img,
+        text,
+        tuple(pos),
+        *font_args,
+        (255, 255, 255)
+    )
+    text_size = cv2.getTextSize(text, *font_args, 1)
+
+    text = f"version: {backend_info_resp['version']}"
+    pos = (pos + (0, text_size[1] * 5)).astype(int)
+    img = cv2.putText(
+        img,
+        text,
+        tuple(pos),
+        *font_args,
+        (255, 255, 255)
+    )
+    text_size = cv2.getTextSize(text, *font_args, 1)
+
+    text = f"description: {backend_info_resp['description']}"
+    wrapped_text = textwrap.wrap(text, width=30)
+    pos = (pos + (0, text_size[1] * 5.5)).astype(int)
+
+    for i, line in enumerate(wrapped_text):
+        text_size = cv2.getTextSize(line, *font_args, 1)
+        img = cv2.putText(
+            img,
+            line,
+            tuple(pos + (text_size[1] * 2 * (i != 0), text_size[1] * 5 * (i + 1))),
+            *font_args,
+            (255, 255, 255)
+        )
+    text_size = cv2.getTextSize(text, *font_args, 1)
+
+    text = f"author: {backend_info_resp['author']}"
+
+    pos = (
+        pos + (0, text_size[1] * 5.5 + text_size[1] * 5 * len(wrapped_text))
+    ).astype(int)
+
+    wrapped_text = textwrap.wrap(text, width=30)
+
+    for i, line in enumerate(wrapped_text):
+        text_size = cv2.getTextSize(line, *font_args, 1)
+        img = cv2.putText(
+            img,
+            line,
+            tuple(pos + (text_size[1] * 2 * (i != 0), text_size[1] * 5 * (i + 1))),
+            *font_args,
+            (255, 255, 255)
+        )
+
+    text = f"maintainer: {backend_info_resp['author']}"
+    pos = (pos + (0, text_size[1] * 5 * len(wrapped_text))).astype(int)
+    wrapped_text = textwrap.wrap(text, width=30)
+
+    for i, line in enumerate(wrapped_text):
+        text_size = cv2.getTextSize(line, *font_args, 1)
+        img = cv2.putText(
+            img,
+            line,
+            tuple(pos + (text_size[1] * 2 * (i != 0), text_size[1] * 5 * (i + 1))),
+            *font_args,
+            (255, 255, 255)
+        )
+
+    # i know this is trash, dont @ me
+    # i'll fix it later
+
+    # the actual button...
+    info_panel = ui.CanvasAlphaObject(
+        np.array(
+            (0.5, 0.5)
+        ) * app_settings['preview_resolution'],
+        img,
+        img2,
+        lambda: ui.set_layer(1, settings_button),  # go away on click
+        layer=2
+    )
+    info_panel.offset_by_img_size()
+
+    layer2_back_anywhere_button = ui.CanvasAlphaObject(  # noqa only needs to be initialized
+        (0, 0),
+        np.zeros(canvas_shape, dtype=np.uint8),
+        np.zeros(canvas_shape[:2], dtype=np.float32),
+        lambda: ui.set_layer(1, settings_button),
+        layer=2
     )
 
     ################################################
@@ -676,6 +848,11 @@ def main():
         gallery_change_dir_setting,
         theme_change_dir_setting,
         toggle_grid_setting,
+        show_backend_info_button,
+        change_backend_button,
+        # layer 2 - back end info
+        info_panel,
+        # layer2_back_anywhere_button, i dont need to render this...
     ]
 
     # don't add this function if only 1 camera is available
