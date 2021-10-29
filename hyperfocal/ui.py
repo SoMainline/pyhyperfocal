@@ -48,7 +48,8 @@ class CanvasObject:
         pos: Tuple[float, float],
         img: np.ndarray,
         callback: Callable,
-        layer: int = 0
+        layer: int = 0,
+        icon_name: str = None
     ):
         global CV_VISIBLE_OBJECTS
         self.pos = np.array(pos).astype(int)
@@ -56,10 +57,24 @@ class CanvasObject:
         self.size = self.img.shape[:2][::-1]
         self.cb = callback
         self.layer = layer
+        self.icon_name = icon_name
 
         self._mouse_pos = (0, 0)
         self._mouse_hold = False
         CV_VISIBLE_OBJECTS.append(self)
+
+    def offset_by_img_size(self):
+        self.pos -= (np.array(self.size) / 2).astype(int)
+
+    def change_icon(self, img: np.ndarray):
+        self.img = img
+        temp_size = self.img.shape[:2][::-1]
+
+        self.pos -= (
+            np.array(temp_size) / 2 - np.array(self.size) / 2
+        ).astype(int)
+
+        self.size = temp_size
 
     def _mouse_cb(self, event: int, x: int, y: int, *rest) -> bool:
         # print(self.__class__.__name__, self.pos, self._mouse_pos)
@@ -103,11 +118,18 @@ class CanvasAlphaObject(CanvasObject):
         # expecting a grayscale image
         alpha_mask: np.ndarray,
         callback: Callable,
-        layer: int = 0
+        layer: int = 0,
+        icon_name: str = None
     ):
-        super().__init__(pos, img, callback, layer)
+        super().__init__(pos, img, callback, layer, icon_name)
         self.mask = np.stack((alpha_mask, ) * 3, axis=-1)
         self.mask_inv = np.stack((1 - alpha_mask, ) * 3, axis=-1)
+
+    def change_icon(self, img: np.ndarray, alpha_mask: np.ndarray):
+        super().change_icon(img)
+        self.mask = np.stack((alpha_mask, ) * 3, axis=-1)
+        self.mask_inv = np.stack((1 - alpha_mask, ) * 3, axis=-1)
+
 
 
 def draw_objects(

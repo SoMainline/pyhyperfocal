@@ -197,18 +197,22 @@ def gallery(
 
     canvas_shape = (*app_settings['preview_resolution'][::-1], 3)
 
+    bck = ui.CanvasAlphaObject(
+        np.array(
+            (0.1, 0.1)
+        ) * app_settings['preview_resolution'],
+        *img_proc.open_image_with_alpha(
+            f'{DATA_DIR}/icons/back_button.png'
+        ),
+        lambda: killer_ref.set(True),
+        layer=3
+    )
+
+    bck.offset_by_img_size()
+
     buttons_transparent = [
         # layer 3  - gallery
-        ui.CanvasAlphaObject(
-            np.array(
-                (0.1, 0.1)
-            ) * app_settings['preview_resolution'] - (25, 25),
-            *img_proc.open_image_with_alpha(
-                f'{DATA_DIR}/icons/back_button.png'
-            ),
-            lambda: killer_ref.set(True),
-            layer=3
-        ),
+        bck,
         ui.CanvasAlphaObject(
             np.array((0, 0)),
             np.zeros((canvas_shape[0], canvas_shape[1] // 2, 3)),
@@ -302,7 +306,7 @@ def main():
     gallery_button = ui.CanvasAlphaObject(
         np.array(
             (0.25, 0.85)
-        ) * app_settings['preview_resolution'] - (35, 35),
+        ) * app_settings['preview_resolution'],
         np.ones((70, 70, 3), dtype=np.uint8) * 150,
         cv2.circle(
             np.zeros((70, 70), dtype=np.uint8),
@@ -313,6 +317,7 @@ def main():
         ) / 255,
         lambda: ui.set_layer(3)
     )
+    gallery_button.offset_by_img_size()
 
     # try to make a last photo preview if possible
     images_paths = _get_image_paths(app_settings['gallery_dir'])
@@ -326,25 +331,28 @@ def main():
     take_photo_button = ui.CanvasAlphaObject(
         np.array(
             (0.5, 0.85)
-        ) * app_settings['preview_resolution'] - (50, 50),
+        ) * app_settings['preview_resolution'],
         *img_proc.open_image_with_alpha(f'{DATA_DIR}/icons/photo_button.png'),
         lambda: take_photo(
             app_settings['gallery_dir'],
-            curr_vod_ref,
-            curr_camcfg_ref,
+            vod,
             gallery_button
-        )
+        ),
+        icon_name="photo_button.png"
     )
+    take_photo_button.offset_by_img_size()
 
     settings_button = ui.CanvasAlphaObject(
         np.array(
             (0.9, 0.07)
-        ) * app_settings['preview_resolution'] - (25, 25),
+        ) * app_settings['preview_resolution'],
         *img_proc.open_image_with_alpha(
             f'{DATA_DIR}/icons/settings_button.png'
         ),
-        None
+        None,
+        icon_name="settings_button.png"
     )
+    settings_button.offset_by_img_size()
 
     settings_button.cb = lambda: ui.set_layer(
         1 if ui.CV_VISIBLE_LAYER != 1 else 0,
@@ -399,16 +407,37 @@ def main():
 
         return True
 
-    def theme_change_dir_setting_cb(app: Dict[str, setting]) -> bool:
+    def theme_change_dir_setting_cb(
+        app: Dict[str, setting],
+        buttons: List[Union[ui.CanvasObject, ui.CanvasAlphaObject]],
+        ROOT_DIR: str
+    ) -> bool:
+        global args
+
         res = easygui.diropenbox(default=True, msg="choose theme dir")
         if res is None:
             return False
 
         app['resources_dir'] = res
         print(f'changed theme dir to "{res}"')
-        easygui.msgbox(
-            'You need to restart to apply the changes.', 'Restart required'
-        )
+        # easygui.msgbox(
+        #     'You need to restart to apply the changes.', 'Restart required'
+        # )
+
+        DATA_DIR = combine_paths(ROOT_DIR, app['resources_dir'])
+
+        for i in buttons:
+            if i.icon_name:
+                i.change_icon(
+                    *img_proc.open_image_with_alpha(
+                        f"{DATA_DIR}/icons/{i.icon_name}"
+                    )
+                )
+
+                if i.icon_name == "grid_button.png" and not app['use_grid']:
+                    i.mask *= 0.5
+                elif i.icon_name == "gallery_button.png" and not app['use_system_gallery']:  # noqa line too long
+                    i.mask *= 0.5
 
         return True
 
@@ -457,11 +486,13 @@ def main():
     gallery_toggle_setting = ui.CanvasAlphaObject(
         np.array(
             (0.2, 0.15)
-        ) * app_settings['preview_resolution'] - (25, 25),
+        ) * app_settings['preview_resolution'],
         *button_icon,
         None,  # assigned below
-        layer=1
+        layer=1,
+        icon_name="gallery_button.png"
     )
+    gallery_toggle_setting.offset_by_img_size()
 
     gallery_toggle_setting.cb = lambda: gallery_toggle_setting_cb(
         app_settings,
@@ -471,22 +502,26 @@ def main():
     gallery_change_dir_setting = ui.CanvasAlphaObject(
         np.array(
             (0.3, 0.15)
-        ) * app_settings['preview_resolution'] - (25, 25),
+        ) * app_settings['preview_resolution'],
         *img_proc.open_image_with_alpha(
             f'{DATA_DIR}/icons/gallerydir_button.png'
         ),
         lambda: gallery_change_dir_setting_cb(app_settings, gallery_button),
-        layer=1
+        layer=1,
+        icon_name="gallerydir_button.png"
     )
+    gallery_change_dir_setting.offset_by_img_size()
 
     theme_change_dir_setting = ui.CanvasAlphaObject(
         np.array(
             (0.4, 0.15)
-        ) * app_settings['preview_resolution'] - (25, 25),
+        ) * app_settings['preview_resolution'],
         *img_proc.open_image_with_alpha(f'{DATA_DIR}/icons/theme_button.png'),
-        lambda: theme_change_dir_setting_cb(app_settings),
-        layer=1
+        None,
+        layer=1,
+        icon_name="theme_button.png"
     )
+    theme_change_dir_setting.offset_by_img_size()
 
     grid_button_icon = img_proc.open_image_with_alpha(
         f'{DATA_DIR}/icons/grid_button.png'
@@ -535,7 +570,7 @@ def main():
     clear_filter = ui.CanvasAlphaObject(
         np.array(
             (0.02, 0.75)
-        ) * app_settings['preview_resolution'] - (0, 15),
+        ) * app_settings['preview_resolution'],
         cv2.putText(
             np.zeros((30, 80, 3), dtype=np.uint8),
             "clear",
@@ -547,11 +582,12 @@ def main():
         np.ones((30, 80)) * 0.4,
         lambda: set_filter(None)
     )
+    # clear_filter.offset_by_img_size()
 
     t1000_filter = ui.CanvasAlphaObject(
         np.array(
             (0.14, 0.75)
-        ) * app_settings['preview_resolution'] - (0, 15),
+        ) * app_settings['preview_resolution'],
         cv2.putText(
             np.zeros((30, 80, 3), dtype=np.uint8),
             "times1000",
@@ -563,11 +599,12 @@ def main():
         np.ones((30, 80)) * 0.4,
         lambda: set_filter(filters.times1000)
     )
+    # t1000_filter.offset_by_img_size()
 
     t2000_filter = ui.CanvasAlphaObject(
         np.array(
             (0.26, 0.75)
-        ) * app_settings['preview_resolution'] - (0, 15),
+        ) * app_settings['preview_resolution'],
         cv2.putText(
             np.zeros((30, 80, 3), dtype=np.uint8),
             "times2000",
@@ -579,11 +616,12 @@ def main():
         np.ones((30, 80)) * 0.4,
         lambda: set_filter(filters.times2000)
     )
+    # t2000_filter.offset_by_img_size()
 
     power2_filter = ui.CanvasAlphaObject(
         np.array(
             (0.38, 0.75)
-        ) * app_settings['preview_resolution'] - (0, 15),
+        ) * app_settings['preview_resolution'],
         cv2.putText(
             np.zeros((30, 80, 3), dtype=np.uint8),
             "power2",
@@ -595,11 +633,12 @@ def main():
         np.ones((30, 80)) * 0.4,
         lambda: set_filter(filters.power2)
     )
+    # power2_filter.offset_by_img_size()
 
     gray_filter = ui.CanvasAlphaObject(
         np.array(
             (0.50, 0.75)
-        ) * app_settings['preview_resolution'] - (0, 15),
+        ) * app_settings['preview_resolution'],
         cv2.putText(
             np.zeros((30, 80, 3), dtype=np.uint8),
             "gray",
@@ -611,6 +650,7 @@ def main():
         np.ones((30, 80)) * 0.4,
         lambda: set_filter(filters.grayscale)
     )
+    # gray_filter.offset_by_img_size()
 
     ################################################
     # button lists for rendering
@@ -631,7 +671,7 @@ def main():
         power2_filter,
         gray_filter,
         # layer 1 - settings
-        settings_anywhere_button,
+        # settings_anywhere_button, i dont need to render this...
         gallery_toggle_setting,
         gallery_change_dir_setting,
         theme_change_dir_setting,
@@ -639,11 +679,11 @@ def main():
     ]
 
     # don't add this function if only 1 camera is available
-    if len(cameras) > 1:
+    if len(camera_ids) > 1:
         cycle_cameras_button = ui.CanvasAlphaObject(
             np.array(
                 (0.75, 0.85)
-            ) * app_settings['preview_resolution'] - (35, 35),
+            ) * app_settings['preview_resolution'],
             *img_proc.open_image_with_alpha(
                 f'{DATA_DIR}/icons/change_camera_button.png'
             ),
@@ -652,10 +692,19 @@ def main():
                 vod,
                 hyperfocal_backend,
                 camera_lock_ref
-            )
+            ),
+            icon_name="change_camera_button.png"
         )
+        cycle_cameras_button.offset_by_img_size()
 
         buttons_transparent.append(cycle_cameras_button)
+
+    # needs to hook back to the list of all displayed buttons
+    theme_change_dir_setting.cb = lambda: theme_change_dir_setting_cb(
+        app_settings,
+        buttons_transparent,
+        args['<cfg_path>']
+    )
 
     #############################################
     # main runtime loop
