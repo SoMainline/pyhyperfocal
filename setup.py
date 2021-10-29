@@ -4,12 +4,12 @@ from hyperfocal import __version__
 setup(
     name="hyperfocal",
     version=__version__,
-    author="Oleg Vorobiov <okawo.198@gmail.com>",
+    author="Oleg Vorobiov <oleg.vorobiov@somainline.org>",
     author_email="",
-    description="python side of hobo_vr",
+    description="A camera app made for Linux",
     long_description="long_description",
     long_description_content_type="text/markdown",
-    url="https://github.com/okawo80085/hobo_vr",
+    url="",
     packages=find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3.7",
