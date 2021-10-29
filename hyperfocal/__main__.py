@@ -18,75 +18,24 @@ import json
 import os
 # import sys
 # import functools
-import time
 from datetime import datetime
 from glob import glob
 import subprocess
 import pathlib
 import easygui
+import textwrap
 from typing import Tuple, Dict, TypeVar, List, Generic, Union, Callable
 
 from . import ui
 from . import img_proc
 from . import filters
+from . import cam
 
 # types
 T = TypeVar('T')
 app_settings = TypeVar('app_settings')
 setting = TypeVar('setting', str, int, float, bool, List[int])
 camera_configs = List[Dict[str, setting]]
-
-###############################################################################
-# CONFIG STUFF
-###############################################################################
-
-
-def parse_args(args: dict) -> Tuple[app_settings, camera_configs]:
-    app = args['app']
-    cameras = args['cameras']
-
-    return app, cameras
-
-
-def init_camera(camera_config: Dict[str, setting]) -> cv2.VideoCapture:
-    if camera_config['need_v4l2_setup']:
-        raise NotImplementedError(
-            f"this setup option is not suppoerted yet: 'need_v4l2_setup': {camera_config['need_v4l2_setup']}"  # noqa E501
-        )
-
-    return cv2.VideoCapture(camera_config['id'])
-
-
-def cleanup_camera(vod: cv2.VideoCapture, config: Dict[str, setting]):
-    if config['need_v4l2_setup']:
-        raise NotImplementedError(
-            f"this cleanup option is not suppoerted yet: 'need_v4l2_setup': {config['need_v4l2_setup']}"  # noqa E501
-        )
-
-    vod.release()
-
-
-def validate_cameras(cameras: camera_configs) -> camera_configs:
-    valid = []
-    for i in cameras:
-        try:
-            vod = init_camera(i)
-
-            ret, _ = vod.read()
-
-            if not ret:
-                raise RuntimeError(
-                    f"failed to read frames from video source \'{i['name']}\'"
-                )
-
-            cleanup_camera(vod, i)
-
-            valid.append(i)
-
-        except Exception as e:
-            print(f"failed to validate camera '{i['name']}': {e}")
-
-    return valid
 
 
 def combine_paths(base_path: str, *other_paths: List[str]) -> str:
@@ -110,8 +59,7 @@ class ref(Generic[T]):
 
 def take_photo(
     save_dir: str,
-    vod: ref[cv2.VideoCapture],
-    config: ref[Dict[str, setting]],
+    vod: ref[cam.VideoStream],
     gallery_button: ui.CanvasObject
 ) -> bool:
 
@@ -130,7 +78,7 @@ def take_photo(
         )
     )
 
-    image = img_proc.process_photo(frame, config.get())
+    image = img_proc.process_photo(frame, vod.get().info)
 
     cv2.imwrite(
         img_save_path,
@@ -146,27 +94,29 @@ def take_photo(
 
 
 def cycle_cameras(
-    cameras: camera_configs,
-    vod: ref[cv2.VideoCapture],
-    config: ref[Dict[str, setting]],
-    config_index: ref[int],
+    cameras: List[str],
+    vod: ref[cam.VideoStream],
+    backend: cam.Backend,
     camera_alive_lock: ref[bool]
 ) -> bool:
+
     camera_alive_lock.set(True)
-    time.sleep(1 / 10)
-    cleanup_camera(vod.get(), config.get())
 
-    # print(f'last camera: {curr_camcfg_idx.get()}')
-    # print(len(cameras))
-    config_index.set(config_index.get() + 1)
-    if len(cameras) <= config_index.get():
-        config_index.set(0)
+    try:
+        vod.get().stop()
 
-    config.set(cameras[config_index.get()])  # noqa unused variable
+        old_id = vod.get().device_id
 
-    print(f'current camera: {config_index.get()}')
+        new_index = cameras.index(old_id) + 1
+        if len(cameras) == new_index:
+            new_index = 0
 
-    vod.set(init_camera(config.get()))
+        new_id = cameras[new_index]
+        vod.set(cam.VideoStream(backend, new_id))
+
+    except Exception as e:
+        print(f'Could not cycle cameras, reason: {e}')
+
     camera_alive_lock.set(False)
 
     return True
@@ -309,9 +259,9 @@ def main():
     args = docopt(__doc__, version=__version__)
 
     with open(args['<cfg_path>'], 'r') as f:
-        conf = json.loads(f.read())
+        app_settings = json.loads(f.read())
 
-    app_settings, cameras = parse_args(conf)
+    # app_settings, cameras = parse_args(conf)
 
     WINDOW_NAME = 'app'
 
@@ -320,34 +270,17 @@ def main():
     # SAVE_DIR = os.path.normpath(os.path.join(SAVE_DIR, 'hyperfocal'))
     DATA_DIR = combine_paths(args['<cfg_path>'], app_settings['resources_dir'])
 
-    cameras = validate_cameras(cameras)
+    hyperfocal_backend = cam.Backend(app_settings['backend_dir'])
 
-    # print(cameras)
+    camera_ids = hyperfocal_backend.list_all()
 
-    curr_camcfg = None
-    curr_camcfg_idx = 0
+    vod = ref(
+        cam.VideoStream(
+            hyperfocal_backend,
+            camera_ids[0]
+        )
+    )
 
-    h = 0
-
-    # look for a default camera
-    for i in cameras:
-        if i['default']:
-            curr_camcfg = i
-            curr_camcfg_idx = h
-            break
-        h += 1
-    else:
-        # default to the first camera if no default is given
-        curr_camcfg = cameras[0]
-
-    # print(curr_camcfg, cameras)
-
-    vod = init_camera(curr_camcfg)
-
-    # shared object references
-    curr_camcfg_ref = ref(curr_camcfg)
-    curr_camcfg_idx_ref = ref(curr_camcfg_idx)
-    curr_vod_ref = ref(vod)
     camera_lock_ref = ref(False)
     canvas_shape = (*app_settings['preview_resolution'][::-1], 3)
 
@@ -715,10 +648,9 @@ def main():
                 f'{DATA_DIR}/icons/change_camera_button.png'
             ),
             lambda: cycle_cameras(
-                cameras,
-                curr_vod_ref,
-                curr_camcfg_ref,
-                curr_camcfg_idx_ref,
+                camera_ids,
+                vod,
+                hyperfocal_backend,
                 camera_lock_ref
             )
         )
@@ -731,10 +663,10 @@ def main():
 
     while cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) > 0:
 
-        ret, frame = curr_vod_ref.get().read()
+        ret, frame = vod.get().read()
 
         if not ret and not camera_lock_ref.get():
-            print('video source died', curr_camcfg_idx_ref.get())
+            print(f'video source "{vod.get()}" died')
             break
 
         # check for a runtime switch
@@ -749,7 +681,9 @@ def main():
         canvas = np.zeros(canvas_shape, dtype=np.uint8)
 
         frame = img_proc.process_preview(
-            frame, curr_camcfg_ref.get(), app_settings['preview_resolution']
+            frame,
+            vod.get().info,
+            app_settings['preview_resolution']
         )
 
         image = ui.draw_objects(canvas, frame, buttons_opaque)
@@ -793,14 +727,12 @@ def main():
             # print(frame.shape)
             break
 
-    cleanup_camera(curr_vod_ref.get(), curr_camcfg_ref.get())
+    hyperfocal_backend.cleanup(vod.get().device_id)
     cv2.destroyAllWindows()
 
     # save settings
-    conf['app'] = app_settings
-    # conf['cameras'] =
     with open(args['<cfg_path>'], 'w') as f:
-        f.write(json.dumps(conf, sort_keys=True, indent=4))
+        f.write(json.dumps(app_settings, sort_keys=True, indent=4))
 
 
 if __name__ == '__main__':
