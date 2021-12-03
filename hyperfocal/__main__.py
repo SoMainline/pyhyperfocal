@@ -152,6 +152,9 @@ def gallery(
 
     image_paths = _get_image_paths(gallery_dir)
 
+    old_filter = img_proc.CV_PHOTO_FILTER
+    img_proc.CV_PHOTO_FILTER = None
+
     if app_settings['use_system_gallery']:
         # this may break on other distros
         subprocess.call(('xdg-open', image_paths[0]))
@@ -248,6 +251,8 @@ def gallery(
             break
 
     ui.set_layer(0)
+    img_proc.CV_PHOTO_FILTER = old_filter
+
     return True
 
 ###############################################################################
@@ -262,12 +267,18 @@ def main():
     ###########################################################################
     args = docopt(__doc__, version=__version__)
 
+    args['<cfg_path>'] = os.path.expanduser(args['<cfg_path>'])
+
     with open(args['<cfg_path>'], 'r') as f:
         app_settings = json.loads(f.read())
 
+    app_settings['gallery_dir'] = os.path.expanduser(
+        app_settings['gallery_dir']
+    )
+
     # app_settings, cameras = parse_args(conf)
 
-    WINDOW_NAME = 'app'
+    WINDOW_NAME = 'HyperFocal'
 
     DEVICE_NAME = app_settings['device']  # noqa unused variable
     # SAVE_DIR = app_settings['gallery_dir']
@@ -288,10 +299,9 @@ def main():
     camera_lock_ref = ref(False)
     canvas_shape = (*app_settings['preview_resolution'][::-1], 3)
 
-    # vod = cv2.VideoCapture(cam_idx)
-
     # setting up app window
-    cv2.namedWindow(WINDOW_NAME)
+    cv2.namedWindow(WINDOW_NAME, flags=cv2.WINDOW_GUI_NORMAL)
+    cv2.resizeWindow(WINDOW_NAME, *app_settings['preview_resolution'])
     cv2.setMouseCallback(WINDOW_NAME, ui.mouse_cb_global)
 
     ################################################
