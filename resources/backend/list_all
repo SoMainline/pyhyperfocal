@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+
+import cv2
+from glob import glob
+import sys
+import errno
+import json
+# import os
+
+v4l_devices = glob('/dev/video*')
+
+if not len(v4l_devices):
+    sys.exit(-errno.ENXIO)
+
+good_devices = []
+
+for i in v4l_devices:
+    vd = cv2.VideoCapture(i)
+
+    ret, frame = vd.read()
+
+    if ret and frame is not None:
+        good_devices.append(i)
+
+    vd.release()
+
+out = {}
+
+for i, d in enumerate(good_devices):
+    out[i] = d
+
+
+conf_path = '/tmp/hyperfocal_backend_state.json'
+
+with open(conf_path, 'w') as f:
+    f.write(json.dumps(out, indent=True))
+
+print('\n'.join([str(i) for i in out.keys()]))
+
+sys.exit(0)
