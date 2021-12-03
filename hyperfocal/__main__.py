@@ -74,7 +74,7 @@ def take_photo(
     img_save_path = os.path.normpath(
         os.path.join(
             save_dir,
-            f'IMG_{datetime.now().strftime("%Y%m%d_%H%M%S_%f")}_raw.png'
+            f'IMG_{datetime.now().strftime("%Y%m%d_%H%M%S_%f")}.png'
         )
     )
 
