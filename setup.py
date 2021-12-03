@@ -20,6 +20,7 @@ setup(
         "opencv-python",
         "easygui",
     ],
+    package_data={'': ['resources/*', 'conf.json']},
     extras_require={},
     entry_points={"console_scripts": ["hyperfocal=hyperfocal.__main__:main"]},
     python_requires=">=3.7",

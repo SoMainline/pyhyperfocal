@@ -1,12 +1,12 @@
 {
-    "backend_dir": "<replace with a proper back end path>",
+    "backend_dir": "./resources/backend",
     "device": "not a phone x64",
     "gallery_dir": "./Camera",
     "preview_resolution": [
         720,
         1280
     ],
-    "resources_dir": "./data",
+    "resources_dir": "./resources/theme",
     "use_grid": false,
-    "use_system_gallery": true
+    "use_system_gallery": false
 }
