@@ -753,16 +753,11 @@ def main():
         np.array(
             (0.02, 0.75)
         ) * app_settings['preview_resolution'],
-        cv2.putText(
-            np.zeros((30, 80, 3), dtype=np.uint8),
-            "clear",
-            text_pos,
-            cv2.FONT_HERSHEY_PLAIN,
-            1,
-            (255, 255, 255)
+        *img_proc.open_image_with_alpha(
+            f'{DATA_DIR}/icons/filters_clear.png'
         ),
-        np.ones((30, 80)) * 0.4,
-        lambda: set_filter(None)
+        lambda: set_filter(None),
+        icon_name="filters_clear.png"
     )
     # clear_filter.offset_by_img_size()
 
@@ -770,16 +765,11 @@ def main():
         np.array(
             (0.14, 0.75)
         ) * app_settings['preview_resolution'],
-        cv2.putText(
-            np.zeros((30, 80, 3), dtype=np.uint8),
-            "times1000",
-            text_pos,
-            cv2.FONT_HERSHEY_PLAIN,
-            1,
-            (255, 255, 255)
+        *img_proc.open_image_with_alpha(
+            f'{DATA_DIR}/icons/filters_times1000.png'
         ),
-        np.ones((30, 80)) * 0.4,
-        lambda: set_filter(filters.times1000)
+        lambda: set_filter(filters.times1000),
+        icon_name="filters_times1000.png"
     )
     # t1000_filter.offset_by_img_size()
 
@@ -787,16 +777,11 @@ def main():
         np.array(
             (0.26, 0.75)
         ) * app_settings['preview_resolution'],
-        cv2.putText(
-            np.zeros((30, 80, 3), dtype=np.uint8),
-            "times2000",
-            text_pos,
-            cv2.FONT_HERSHEY_PLAIN,
-            1,
-            (255, 255, 255)
+        *img_proc.open_image_with_alpha(
+            f'{DATA_DIR}/icons/filters_times2000.png'
         ),
-        np.ones((30, 80)) * 0.4,
-        lambda: set_filter(filters.times2000)
+        lambda: set_filter(filters.times2000),
+        icon_name="filters_times2000.png"
     )
     # t2000_filter.offset_by_img_size()
 
@@ -804,16 +789,11 @@ def main():
         np.array(
             (0.38, 0.75)
         ) * app_settings['preview_resolution'],
-        cv2.putText(
-            np.zeros((30, 80, 3), dtype=np.uint8),
-            "power2",
-            text_pos,
-            cv2.FONT_HERSHEY_PLAIN,
-            1,
-            (255, 255, 255)
+        *img_proc.open_image_with_alpha(
+            f'{DATA_DIR}/icons/filters_power2.png'
         ),
-        np.ones((30, 80)) * 0.4,
-        lambda: set_filter(filters.power2)
+        lambda: set_filter(filters.power2),
+        icon_name="filters_power2.png"
     )
     # power2_filter.offset_by_img_size()
 
@@ -821,16 +801,11 @@ def main():
         np.array(
             (0.50, 0.75)
         ) * app_settings['preview_resolution'],
-        cv2.putText(
-            np.zeros((30, 80, 3), dtype=np.uint8),
-            "gray",
-            text_pos,
-            cv2.FONT_HERSHEY_PLAIN,
-            1,
-            (255, 255, 255)
+        *img_proc.open_image_with_alpha(
+            f'{DATA_DIR}/icons/filters_gray.png'
         ),
-        np.ones((30, 80)) * 0.4,
-        lambda: set_filter(filters.grayscale)
+        lambda: set_filter(filters.grayscale),
+        icon_name="filters_gray.png"
     )
     # gray_filter.offset_by_img_size()
 
